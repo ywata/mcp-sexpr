@@ -1,0 +1,17 @@
+[package]
+name = "mcp-sexpr"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "S-expression utilities for MCP (Model Context Protocol) tool development"
+repository = "https://github.com/ywata/mcp-sexpr"
+documentation = "https://docs.rs/mcp-sexpr"
+readme = "README.md"
+keywords = ["sexpr", "s-expression", "mcp", "parsing"]
+categories = ["parsing", "data-structures"]
+
+[dependencies]
+anyhow = "1.0"
+lexpr = "0.2"
+
+[workspace]
