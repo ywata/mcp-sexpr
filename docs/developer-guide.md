@@ -1,15 +1,26 @@
-# Developer Guide for MCP Tool Authors
+# Developer Guide for mcp-tools
 
 ## Overview
 
-This document describes how to use the `mcp-sexpr` crate when implementing MCP (Model Context Protocol) tools.
+This guide covers how to use the `mcp-tools` crate (v0.2.0) when building MCP (Model Context Protocol) servers and clients.
 
-The crate provides utilities for:
+The crate provides:
 
+### Core Features (always available)
 - Parsing S-expression tool calls
 - Extracting keyword arguments
 - Handling `(use "path")` file references
 - Serializing S-expression fragments
+
+### Optional Features (via feature flags)
+- **prompts** - Configuration-driven prompt building
+- **interactive** - Interactive line loops with history
+- **format** - Response formatting utilities
+- **extract** - Type-safe argument extraction
+- **persistence** - SQLite-based logging
+- **log-viewer** - Interactive log query tool
+- **router** - Tool routing patterns
+- **errors** - Typed error examples
 
 ## Tool Call Shape Conventions
 
@@ -41,7 +52,7 @@ A typical parsing workflow for tool handlers:
 ### Example
 
 ```rust
-use mcp_sexpr::{parse_value, require_kw_str, get_kw_str, get_kw_value, parse_str_list};
+use mcp_tools::{parse_value, require_kw_str, get_kw_str, get_kw_value, parse_str_list};
 
 fn handle_tool_call(input: &str) -> anyhow::Result<()> {
     // Step 1: Parse
@@ -180,3 +191,196 @@ The crate attaches context to parsing failures automatically.
 2. **Use `get_kw_str` for optional arguments** — Returns `None` when missing
 3. **Use `get_kw_value` for complex values** — Then parse with `parse_str_list` or `parse_text_ref`
 4. **Keep domain-specific parsing separate** — This crate handles S-expression mechanics; your code handles domain logic
+
+---
+
+## Feature Guide: Type-Safe Extraction (feature = "extract")
+
+The `extract` module provides type-safe argument extraction with automatic type conversion.
+
+### Available Functions
+
+- `parse_tool_call(sexpr)` - Parse S-expression into lexpr::Value
+- `require_string(value, key)` - Required string argument
+- `get_string(value, key)` - Optional string argument
+- `get_bool(value, key)` - Optional boolean (true/false/#t/#f)
+- `get_int(value, key)` - Optional integer (i64)
+- `get_uint(value, key)` - Optional unsigned integer (usize)
+- `extract_string_list(value)` - Extract list of strings
+
+### Example
+
+```rust
+use mcp_tools::extract::*;
+
+let value = parse_tool_call("(tool :count 42 :enabled true)")?;
+let count = get_int(&value, "count")?;      // Some(42)
+let enabled = get_bool(&value, "enabled")?; // Some(true)
+```
+
+---
+
+## Feature Guide: Response Formatting (feature = "format")
+
+Build S-expression responses with consistent formatting.
+
+```rust
+use mcp_tools::format::*;
+
+// Success response
+let response = format_success(&[("id", "123"), ("status", "ok")]);
+// "(success :id \"123\" :status \"ok\")"
+
+// Error response
+let error = format_error("Not found");
+// "(error \"Not found\")"
+
+// Blocked response with waiting items
+let blocked = format_blocked(
+    &["item1".to_string(), "item2".to_string()],
+    &[("reason", "waiting")]
+);
+// "(blocked :waiting-goals (\"item1\" \"item2\") :reason \"waiting\")"
+```
+
+---
+
+## Feature Guide: Prompt System (feature = "prompts")
+
+Configuration-driven prompt building from TOML + markdown.
+
+### Configuration File (tools.toml)
+
+```toml
+[initialize]
+prompt_doc = "overview.md"
+prompt_sections = ["# Introduction", "## Features"]
+
+[tools.my-tool]
+prompt_doc = "api-spec.md"
+prompt_sections = ["## my-tool"]
+```
+
+### Usage
+
+```rust
+use mcp_tools::prompt::PromptBuilder;
+
+let builder = PromptBuilder::new("tools.toml", "docs")?;
+
+// Build initialize prompt
+let init_prompt = builder.build_initialize_prompt()?;
+
+// Build tool-specific prompt
+let tool_prompt = builder.build_tool_prompt("my-tool")?;
+
+// Get all tool names
+let tools = builder.get_tool_names();
+```
+
+---
+
+## Feature Guide: Interactive Line Loop (feature = "interactive")
+
+Generic rustyline-based interactive loop with history support.
+
+```rust
+use mcp_tools::interactive::{run_line_loop, LineLoopConfig, LoopControl};
+
+let config = LineLoopConfig::new(
+    || "prompt> ".to_string(),
+    true,  // add to history
+    || LoopControl::Continue,  // on Ctrl-C
+    || LoopControl::Break,     // on EOF
+);
+
+run_line_loop(config, |line| {
+    // Process line
+    println!("Got: {}", line);
+    Ok(LoopControl::Continue)
+})?;
+```
+
+For async support, use `run_line_loop_async` with the `interactive-async` feature.
+
+---
+
+## Feature Guide: Router Pattern (feature = "router")
+
+Register and route tool calls to handlers.
+
+```rust
+use mcp_tools::router::Router;
+
+let mut router = Router::new();
+
+// Register handlers
+router.register("echo", |args| {
+    Ok(format!("(success :echo {})", args))
+});
+
+router.register("add", |args| {
+    // Parse args and return result
+    Ok("(success :result 42)".to_string())
+});
+
+// Register alias
+router.register_alias("alias-tool", "echo");
+
+// Route calls
+let result = router.route("echo", "(echo :msg \"hello\")")?;
+```
+
+---
+
+## Feature Guide: Persistence (feature = "persistence")
+
+SQLite-based tool call logging for observability.
+
+```rust
+use mcp_tools::persistence::{SqlitePersistence, ToolCallEvent};
+
+let db = SqlitePersistence::open("logs.db")?;
+
+// Log tool call
+let event = ToolCallEvent {
+    transport: "stdio".to_string(),
+    client_name: Some("my-client".to_string()),
+    tool_name: "my-tool".to_string(),
+    canonical_tool_name: "my-tool".to_string(),
+    request_sexpr: "(my-tool :arg \"value\")".to_string(),
+    response_sexpr: "(success)".to_string(),
+    is_error: false,
+    context_id: Some("session-123".to_string()),
+};
+
+db.insert_tool_call_event(&event)?;
+```
+
+---
+
+## Feature Guide: Error Patterns (feature = "errors")
+
+The `errors` module provides examples of typed error design using `thiserror`.
+
+```rust
+use mcp_tools::errors::{StateError, TransitionError, DependencyError};
+
+// Example error types demonstrating best practices
+// See module documentation for complete examples
+```
+
+These are example error types you can use as templates for your own error handling.
+
+---
+
+## Choosing Features
+
+Select features based on your needs:
+
+- **Core only** - Just S-expression parsing: `mcp-tools = "0.2"`
+- **Server basics** - Add routing and formatting: `features = ["router", "format"]`
+- **Full server** - All server features: `features = ["router", "format", "extract", "prompts", "persistence"]`
+- **Interactive tools** - Add CLI support: `features = ["interactive", "log-viewer"]`
+- **Everything** - All features: `features = ["all"]`
+

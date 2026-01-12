@@ -1,16 +1,33 @@
-//! S-expression utilities for MCP (Model Context Protocol) tool development.
+//! Comprehensive toolkit for MCP (Model Context Protocol) server and client development.
 //!
-//! This crate provides common utilities for working with S-expressions in MCP tools:
+//! This crate (formerly `mcp-sexpr`) provides a comprehensive set of utilities for building
+//! MCP servers and clients in Rust. It includes:
+//!
+//! ## Core S-expression Utilities (always available)
 //!
 //! - **Parsing**: Parse S-expression strings using `lexpr`
 //! - **Keyword extraction**: Extract keyword arguments from tool-call forms
 //! - **TextRef handling**: Parse and render `(use "path")` file references
 //! - **Serialization**: Quote strings and render lists with proper escaping
 //!
+//! ## Optional Features
+//!
+//! Enable features in your `Cargo.toml` to access additional functionality:
+//!
+//! - **`prompts`**: TOML configuration + markdown prompt building system
+//! - **`interactive`**: Generic rustyline-based interactive line loop (sync)
+//! - **`interactive-async`**: Async variant of interactive line loop (requires tokio)
+//! - **`format`**: S-expression response formatting utilities
+//! - **`extract`**: Type-safe argument extraction with type conversion
+//! - **`persistence`**: SQLite-based tool call logging and observability
+//! - **`log-viewer`**: Interactive CLI for querying tool call logs
+//! - **`router`**: MCP server routing patterns with handler registration
+//! - **`errors`**: Typed error patterns and examples using thiserror
+//!
 //! # Example
 //!
 //! ```rust
-//! use mcp_sexpr::{parse_value, require_kw_str, parse_text_ref, TextRef};
+//! use mcp_tools::{parse_value, require_kw_str, parse_text_ref, TextRef};
 //!
 //! let input = r#"(tool :name "example" :spec (use "docs/spec.md"))"#;
 //! let value = parse_value(input).unwrap();
@@ -18,9 +35,42 @@
 //! let name = require_kw_str(&value, "name").unwrap();
 //! assert_eq!(name, "example");
 //! ```
+//!
+//! # Feature Flags
+//!
+//! ```toml
+//! [dependencies]
+//! mcp-tools = { version = "0.2", features = ["prompts", "interactive", "format"] }
+//! ```
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+
+// Feature-gated modules
+#[cfg(feature = "prompts")]
+pub mod prompt;
+
+#[cfg(feature = "interactive")]
+pub mod interactive;
+
+#[cfg(feature = "format")]
+pub mod format;
+
+#[cfg(feature = "extract")]
+pub mod extract;
+
+/// SQLite-based tool call persistence and logging.
+#[cfg(feature = "persistence")]
+pub mod persistence;
+
+#[cfg(feature = "log-viewer")]
+pub mod log_viewer;
+
+#[cfg(feature = "router")]
+pub mod router;
+
+#[cfg(feature = "errors")]
+pub mod errors;
 
 use anyhow::{anyhow, Context, Result};
 
@@ -29,7 +79,7 @@ use anyhow::{anyhow, Context, Result};
 /// # Example
 ///
 /// ```rust
-/// use mcp_sexpr::parse_value;
+/// use mcp_tools::parse_value;
 ///
 /// let value = parse_value("(tool :key \"value\")").unwrap();
 /// assert!(value.as_cons().is_some());
@@ -55,7 +105,7 @@ fn normalize_kw(key: &lexpr::Value) -> Option<&str> {
 /// # Example
 ///
 /// ```rust
-/// use mcp_sexpr::{parse_value, get_kw_value};
+/// use mcp_tools::{parse_value, get_kw_value};
 ///
 /// let value = parse_value("(tool :key \"value\")").unwrap();
 /// let kv = get_kw_value(&value, "key").unwrap();
@@ -96,7 +146,7 @@ pub fn get_kw_value(root: &lexpr::Value, key: &str) -> Result<Option<lexpr::Valu
 /// # Example
 ///
 /// ```rust
-/// use mcp_sexpr::{parse_value, get_kw_str};
+/// use mcp_tools::{parse_value, get_kw_str};
 ///
 /// let value = parse_value("(tool :name \"example\")").unwrap();
 /// assert_eq!(get_kw_str(&value, "name").unwrap(), Some("example".to_string()));
@@ -119,7 +169,7 @@ pub fn get_kw_str(root: &lexpr::Value, key: &str) -> Result<Option<String>> {
 /// # Example
 ///
 /// ```rust
-/// use mcp_sexpr::{parse_value, require_kw_str};
+/// use mcp_tools::{parse_value, require_kw_str};
 ///
 /// let value = parse_value("(tool :name \"example\")").unwrap();
 /// assert_eq!(require_kw_str(&value, "name").unwrap(), "example");
@@ -135,7 +185,7 @@ pub fn require_kw_str(root: &lexpr::Value, key: &str) -> Result<String> {
 /// # Example
 ///
 /// ```rust
-/// use mcp_sexpr::{parse_value, iter_list};
+/// use mcp_tools::{parse_value, iter_list};
 ///
 /// let value = parse_value("(a b c)").unwrap();
 /// let items: Vec<_> = iter_list(&value).unwrap().collect();
@@ -158,7 +208,7 @@ pub fn iter_list(value: &lexpr::Value) -> Result<impl Iterator<Item = lexpr::Val
 /// # Example
 ///
 /// ```rust
-/// use mcp_sexpr::{parse_value, parse_str_list};
+/// use mcp_tools::{parse_value, parse_str_list};
 ///
 /// let value = parse_value("(\"a\" \"b\" \"c\")").unwrap();
 /// assert_eq!(parse_str_list(&value).unwrap(), vec!["a", "b", "c"]);
@@ -191,7 +241,7 @@ pub enum TextRef {
 /// # Example
 ///
 /// ```rust
-/// use mcp_sexpr::{parse_value, parse_text_ref, TextRef};
+/// use mcp_tools::{parse_value, parse_text_ref, TextRef};
 ///
 /// let literal = parse_value("\"hello\"").unwrap();
 /// assert_eq!(parse_text_ref(&literal).unwrap(), TextRef::Literal("hello".to_string()));
@@ -235,7 +285,7 @@ pub fn parse_text_ref(value: &lexpr::Value) -> Result<TextRef> {
 /// # Example
 ///
 /// ```rust
-/// use mcp_sexpr::{render_text_ref, TextRef};
+/// use mcp_tools::{render_text_ref, TextRef};
 ///
 /// let literal = TextRef::Literal("hello".to_string());
 /// assert_eq!(render_text_ref(&literal), "\"hello\"");
@@ -260,7 +310,7 @@ pub fn render_text_ref(value: &TextRef) -> String {
 /// # Example
 ///
 /// ```rust
-/// use mcp_sexpr::quote_str;
+/// use mcp_tools::quote_str;
 ///
 /// assert_eq!(quote_str("hello"), "\"hello\"");
 /// assert_eq!(quote_str("say \"hi\""), "\"say \\\"hi\\\"\"");
@@ -285,7 +335,7 @@ pub fn quote_str(s: &str) -> String {
 /// # Example
 ///
 /// ```rust
-/// use mcp_sexpr::render_list;
+/// use mcp_tools::render_list;
 ///
 /// let items = vec!["\"a\"".to_string(), "\"b\"".to_string()];
 /// assert_eq!(render_list(items), "\"a\" \"b\"");

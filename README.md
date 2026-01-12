@@ -1,13 +1,29 @@
-# mcp-sexpr
+# mcp-tools
 
-S-expression utilities for MCP (Model Context Protocol) tool development.
+Comprehensive toolkit for MCP (Model Context Protocol) server and client development in Rust.
 
 ## Features
+
+### Core S-expression Utilities (always available)
 
 - **Parse S-expressions** with `lexpr`
 - **Extract keyword arguments** from tool-call forms (`:key value` pairs)
 - **Handle `(use "path")` file references** with the `TextRef` type
 - **Serialize strings** with proper escaping
+
+### Optional Features
+
+Enable additional functionality via feature flags:
+
+- **`prompts`** - TOML configuration + markdown prompt building system
+- **`interactive`** - Generic rustyline-based interactive line loop (sync)
+- **`interactive-async`** - Async variant of interactive line loop (requires tokio)
+- **`format`** - S-expression response formatting utilities
+- **`extract`** - Type-safe argument extraction with type conversion
+- **`persistence`** - SQLite-based tool call logging and observability
+- **`log-viewer`** - Interactive CLI for querying tool call logs
+- **`router`** - MCP server routing patterns with handler registration
+- **`errors`** - Typed error patterns and examples using thiserror
 
 ## Installation
 
@@ -15,15 +31,18 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mcp-sexpr = "0.1"
+mcp-tools = "0.2"
+
+# Or with specific features
+mcp-tools = { version = "0.2", features = ["prompts", "interactive", "format"] }
 ```
 
-## Usage
+## Quick Start
 
-### Parse and Extract Keywords
+### Core S-expression Utilities
 
 ```rust
-use mcp_sexpr::{parse_value, require_kw_str, get_kw_str};
+use mcp_tools::{parse_value, require_kw_str, get_kw_str};
 
 let input = r#"(my-tool :name "example" :version "1.0")"#;
 let value = parse_value(input)?;
@@ -33,57 +52,78 @@ let name = require_kw_str(&value, "name")?;
 
 let version = get_kw_str(&value, "version")?;
 // version == Some("1.0")
-
-let missing = get_kw_str(&value, "missing")?;
-// missing == None
 ```
 
-### Handle File References
+### Prompt System (feature = "prompts")
 
 ```rust
-use mcp_sexpr::{parse_value, get_kw_value, parse_text_ref, TextRef};
+use mcp_tools::prompt::PromptBuilder;
 
-let input = r#"(define :spec (use "docs/spec.md"))"#;
-let value = parse_value(input)?;
-
-if let Some(spec_value) = get_kw_value(&value, "spec")? {
-    match parse_text_ref(&spec_value)? {
-        TextRef::Literal(text) => println!("Inline: {}", text),
-        TextRef::UsePath(path) => println!("File: {}", path),
-    }
-}
+let builder = PromptBuilder::new("tools.toml", "docs")?;
+let init_prompt = builder.build_initialize_prompt()?;
+let tool_prompt = builder.build_tool_prompt("my-tool")?;
 ```
 
-### Parse String Lists
+### Type-Safe Argument Extraction (feature = "extract")
 
 ```rust
-use mcp_sexpr::{parse_value, get_kw_value, parse_str_list};
+use mcp_tools::extract::*;
 
-let input = r#"(build :requires ("lib-a" "lib-b" "lib-c"))"#;
-let value = parse_value(input)?;
-
-if let Some(reqs_value) = get_kw_value(&value, "requires")? {
-    let reqs = parse_str_list(&reqs_value)?;
-    // reqs == vec!["lib-a", "lib-b", "lib-c"]
-}
+let value = parse_tool_call("(tool :count 42 :enabled true)")?;
+let count = get_int(&value, "count")?;      // Some(42)
+let enabled = get_bool(&value, "enabled")?; // Some(true)
 ```
 
-### Serialize S-expressions
+### Response Formatting (feature = "format")
 
 ```rust
-use mcp_sexpr::{quote_str, render_list, render_text_ref, TextRef};
+use mcp_tools::format::*;
 
-let quoted = quote_str("hello \"world\"");
-// quoted == "\"hello \\\"world\\\"\""
-
-let list = render_list(vec![quote_str("a"), quote_str("b")]);
-// list == "\"a\" \"b\""
-
-let text_ref = render_text_ref(&TextRef::UsePath("docs/spec.md".to_string()));
-// text_ref == "(use \"docs/spec.md\")"
+let response = format_success(&[
+    ("id", "123"),
+    ("status", "complete"),
+]);
+// "(success :id \"123\" :status \"complete\")"
 ```
 
-## API Reference
+### Interactive Line Loop (feature = "interactive")
+
+```rust
+use mcp_tools::interactive::{run_line_loop, LineLoopConfig, LoopControl};
+
+let config = LineLoopConfig::new(
+    || "prompt> ".to_string(),
+    true,  // add to history
+    || LoopControl::Continue,  // on Ctrl-C
+    || LoopControl::Break,     // on EOF
+);
+
+run_line_loop(config, |line| {
+    println!("Got: {}", line);
+    Ok(LoopControl::Continue)
+})?;
+```
+
+### Router Pattern (feature = "router")
+
+```rust
+use mcp_tools::router::Router;
+
+let mut router = Router::new();
+router.register("echo", |args| {
+    Ok(format!("(success :echo {})", args))
+});
+
+let result = router.route("echo", "(echo :msg \"hello\")")?;
+```
+
+## Documentation
+
+- **[API Documentation](https://docs.rs/mcp-tools)** - Full API reference
+- **[Developer Guide](docs/developer-guide.md)** - Comprehensive usage guide
+- **[Examples](examples/)** - Example implementations
+
+## Core API Reference
 
 ### Parsing
 
@@ -107,6 +147,8 @@ let text_ref = render_text_ref(&TextRef::UsePath("docs/spec.md".to_string()));
 ### Types
 
 - `TextRef` — Either `Literal(String)` or `UsePath(String)`
+
+See the [API documentation](https://docs.rs/mcp-tools) for complete details on all features.
 
 ## License
 

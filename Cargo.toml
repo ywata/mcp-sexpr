@@ -1,17 +1,42 @@
 [package]
-name = "mcp-sexpr"
-version = "0.1.0"
+name = "mcp-tools"
+version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-description = "S-expression utilities for MCP (Model Context Protocol) tool development"
-repository = "https://github.com/ywata/mcp-sexpr"
-documentation = "https://docs.rs/mcp-sexpr"
+description = "Comprehensive toolkit for MCP (Model Context Protocol) server and client development"
+repository = "https://github.com/ywata/mcp-tools"
+documentation = "https://docs.rs/mcp-tools"
 readme = "README.md"
-keywords = ["sexpr", "s-expression", "mcp", "parsing"]
-categories = ["parsing", "data-structures"]
+keywords = ["mcp", "sexpr", "prompts", "tools", "server"]
+categories = ["parsing", "data-structures", "development-tools"]
 
 [dependencies]
 anyhow = "1.0"
 lexpr = "0.2"
+thiserror = "1.0"
+
+# Optional dependencies for features
+serde = { version = "1.0", features = ["derive"], optional = true }
+toml = { version = "0.8", optional = true }
+rustyline = { version = "14.0", optional = true }
+tokio = { version = "1.48", features = ["sync"], optional = true }
+rusqlite = { version = "0.31", features = ["bundled"], optional = true }
+
+[features]
+default = ["sexpr"]
+sexpr = []
+prompts = ["serde", "toml"]
+interactive = ["rustyline"]
+interactive-async = ["interactive", "tokio"]
+format = []
+extract = []
+persistence = ["rusqlite"]
+log-viewer = ["persistence", "interactive"]
+router = []
+errors = []
+all = ["sexpr", "prompts", "interactive", "interactive-async", "format", "extract", "persistence", "log-viewer", "router", "errors"]
+
+[dev-dependencies]
+tempfile = "3.8"
 
 [workspace]
