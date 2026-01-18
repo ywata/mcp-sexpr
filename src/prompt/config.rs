@@ -37,6 +37,9 @@ pub struct ToolConfig {
     /// Optional alias pointing to the canonical tool name
     #[serde(default)]
     pub alias_for: Option<String>,
+    /// Optional argument registry for tools that support argument-based documentation lookup
+    #[serde(default)]
+    pub argument_registry: Option<Vec<String>>,
     /// Optional extra configuration fields (for extensibility)
     #[serde(flatten)]
     pub extra: HashMap<String, toml::Value>,
