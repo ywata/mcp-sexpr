@@ -300,12 +300,18 @@ pub fn render_text_ref(value: &TextRef) -> String {
     }
 }
 
-/// Quote and minimally escape a string for use inside an S-expression string literal.
+/// Quote and escape a string for use inside an S-expression string literal.
 ///
-/// Escaping policy:
+/// Escaping policy (matches the subset of escapes `lexpr` accepts on parse, so
+/// emitted strings round-trip through `parse_value`):
 /// - `\` → `\\`
 /// - `"` → `\"`
-/// - `\n` → `\n` (literal backslash-n)
+/// - LF (U+000A) → `\n`
+/// - CR (U+000D) → `\r`
+/// - TAB (U+0009) → `\t`
+///
+/// Other control characters (e.g. NUL, BEL) are passed through verbatim — lexpr
+/// has no portable escape for them, and hex escapes are not accepted on parse.
 ///
 /// # Example
 ///
@@ -323,6 +329,8 @@ pub fn quote_str(s: &str) -> String {
             '\\' => out.push_str("\\\\"),
             '"' => out.push_str("\\\""),
             '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
             other => out.push(other),
         }
     }
@@ -396,5 +404,16 @@ mod tests {
         assert_eq!(quote_str("a\"b"), "\"a\\\"b\"");
         assert_eq!(quote_str("a\\b"), "\"a\\\\b\"");
         assert_eq!(quote_str("a\nb"), "\"a\\nb\"");
+        assert_eq!(quote_str("a\rb"), "\"a\\rb\"");
+        assert_eq!(quote_str("a\tb"), "\"a\\tb\"");
+    }
+
+    #[test]
+    fn quote_str_round_trips_through_lexpr() {
+        for original in ["plain", "with \"quote\"", "back\\slash", "tab\there", "cr\rhere", "lf\nhere", "mixed \"\\\n\r\t end"] {
+            let quoted = quote_str(original);
+            let parsed = lexpr::from_str(&quoted).expect("lexpr parse");
+            assert_eq!(parsed.as_str(), Some(original), "round-trip failed for {:?}", original);
+        }
     }
 }

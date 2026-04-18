@@ -448,15 +448,19 @@ Tool descriptions (for MCP `tools/list`) are loaded from documentation files via
 
 ## String Escaping
 
-Always escape strings before embedding in S-expressions:
+Always escape strings before embedding in S-expressions. Use `mcp_tools::quote_str()` — it handles both escaping and wrapping in double quotes.
 
-```rust
-fn escape_sexpr(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"")
-}
-```
+The escape policy (chosen to round-trip through `parse_value` / `lexpr`):
 
-Or use `mcp_tools::quote_str()` which handles both escaping and wrapping in double quotes.
+| Input char | Emitted as |
+|---|---|
+| `\` | `\\` |
+| `"` | `\"` |
+| LF (U+000A) | `\n` |
+| CR (U+000D) | `\r` |
+| TAB (U+0009) | `\t` |
+
+Other control characters are passed through verbatim — lexpr does not accept hex escapes on parse, so there is no portable way to escape e.g. NUL. If you need to carry binary data, encode it (base64, hex) before quoting.
 
 ## Summary of Conventions
 
