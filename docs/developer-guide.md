@@ -154,6 +154,18 @@ let quoted = quote_str("hello");           // "\"hello\""
 let escaped = quote_str("say \"hi\"");     // "\"say \\\"hi\\\"\""
 ```
 
+Escape policy (chosen so output round-trips through `parse_value` / `lexpr`):
+
+| Input char | Emitted as |
+|---|---|
+| `\` | `\\` |
+| `"` | `\"` |
+| LF (U+000A) | `\n` |
+| CR (U+000D) | `\r` |
+| TAB (U+0009) | `\t` |
+
+Other control characters pass through verbatim — lexpr does not accept hex escapes on parse, so there is no portable escape for e.g. NUL. Encode binary data (base64, hex) before quoting.
+
 ### `render_list` — Join Rendered Items
 
 ```rust
