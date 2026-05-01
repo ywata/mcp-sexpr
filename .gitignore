@@ -11,3 +11,5 @@ src/traceability_gen.rs
 
 # Local Claude Code state
 .claude/settings.local.json
+
+compose-commands.toml
