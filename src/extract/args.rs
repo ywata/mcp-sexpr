@@ -3,8 +3,13 @@
 //! These functions build on the existing `mcp-sexpr` keyword extraction
 //! functions to provide type-safe argument parsing with clear error messages.
 
+#![allow(deprecated)]
+
+use crate::{
+    get_kw_str_lexpr, get_kw_value_lexpr, parse_str_list_lexpr, parse_value_lexpr,
+    require_kw_str_lexpr,
+};
 use anyhow::{Context, Result};
-use crate::{get_kw_str, get_kw_value, parse_str_list, parse_value, require_kw_str};
 
 /// Parse a tool call S-expression into a lexpr::Value.
 ///
@@ -17,7 +22,7 @@ use crate::{get_kw_str, get_kw_value, parse_str_list, parse_value, require_kw_st
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn parse_tool_call(sexpr: &str) -> Result<lexpr::Value> {
-    parse_value(sexpr).context("failed to parse tool call s-expression")
+    parse_value_lexpr(sexpr).context("failed to parse tool call s-expression")
 }
 
 /// Extract a required string keyword argument.
@@ -35,7 +40,7 @@ pub fn parse_tool_call(sexpr: &str) -> Result<lexpr::Value> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn require_string(value: &lexpr::Value, key: &str) -> Result<String> {
-    require_kw_str(value, key).with_context(|| format!("Missing required keyword :{}", key))
+    require_kw_str_lexpr(value, key).with_context(|| format!("Missing required keyword :{}", key))
 }
 
 /// Extract an optional string keyword argument.
@@ -53,7 +58,7 @@ pub fn require_string(value: &lexpr::Value, key: &str) -> Result<String> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn get_string(value: &lexpr::Value, key: &str) -> Result<Option<String>> {
-    get_kw_str(value, key).with_context(|| format!("Error extracting keyword :{}", key))
+    get_kw_str_lexpr(value, key).with_context(|| format!("Error extracting keyword :{}", key))
 }
 
 /// Extract a required keyword argument as raw lexpr::Value.
@@ -69,7 +74,7 @@ pub fn get_string(value: &lexpr::Value, key: &str) -> Result<Option<String>> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn require_value(value: &lexpr::Value, key: &str) -> Result<lexpr::Value> {
-    get_kw_value(value, key)?
+    get_kw_value_lexpr(value, key)?
         .ok_or_else(|| anyhow::anyhow!("Missing required keyword :{}", key))
 }
 
@@ -86,7 +91,7 @@ pub fn require_value(value: &lexpr::Value, key: &str) -> Result<lexpr::Value> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn get_value(value: &lexpr::Value, key: &str) -> Result<Option<lexpr::Value>> {
-    get_kw_value(value, key)
+    get_kw_value_lexpr(value, key)
 }
 
 /// Extract a string list from a lexpr::Value.
@@ -103,7 +108,7 @@ pub fn get_value(value: &lexpr::Value, key: &str) -> Result<Option<lexpr::Value>
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn extract_string_list(value: &lexpr::Value) -> Result<Vec<String>> {
-    parse_str_list(value).context("Failed to parse string list")
+    parse_str_list_lexpr(value).context("Failed to parse string list")
 }
 
 /// Extract an optional boolean keyword argument.
@@ -121,7 +126,7 @@ pub fn extract_string_list(value: &lexpr::Value) -> Result<Vec<String>> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn get_bool(value: &lexpr::Value, key: &str) -> Result<Option<bool>> {
-    match get_kw_value(value, key)? {
+    match get_kw_value_lexpr(value, key)? {
         None => Ok(None),
         Some(v) => {
             if let Some(b) = v.as_bool() {
@@ -163,7 +168,7 @@ pub fn get_bool(value: &lexpr::Value, key: &str) -> Result<Option<bool>> {
 /// # Ok::<(), anyhow::Error>(())
 /// ```
 pub fn get_int(value: &lexpr::Value, key: &str) -> Result<Option<i64>> {
-    match get_kw_value(value, key)? {
+    match get_kw_value_lexpr(value, key)? {
         None => Ok(None),
         Some(v) => {
             if let Some(n) = v.as_i64() {

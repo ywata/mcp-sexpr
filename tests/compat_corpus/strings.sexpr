@@ -1,0 +1,11 @@
+(""
+ "hello"
+ "with spaces"
+ "with \"quotes\""
+ "with \\ backslash"
+ "with \n newline"
+ "with \r return"
+ "with \t tab"
+ "unicode: héllo"
+ "mixed \"\\\n\r\t end"
+ ("a" "b" "c"))

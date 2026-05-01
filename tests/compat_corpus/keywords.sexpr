@@ -1,0 +1,7 @@
+(tool
+ :name "x"
+ :a 1
+ :b 2
+ :nested (sub :k "v")
+ :list (a b c)
+ :keyword-only :true)
