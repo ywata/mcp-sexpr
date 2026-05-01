@@ -55,6 +55,14 @@ pub use traceability_gen::SpecItem;
 // Position-tracking parser (replaces lexpr::Value as canonical representation).
 pub mod parser;
 
+// Constructor functions for `Value`. See `specs/build/api.md`.
+pub mod build;
+
+// Form-shape pattern matching. See `specs/match-form/api.md`.
+pub mod match_form;
+
+pub use match_form::{match_form, FormMatch};
+
 pub use parser::{
     current_differential_mode, flush_discrepancy_dedup, parse_value_with_positions,
     set_differential_mode, set_discrepancy_dedup_capacity, Comment, CommentKind, DifferentialMode,
@@ -71,6 +79,9 @@ pub mod interactive;
 
 #[cfg(feature = "format")]
 pub mod format;
+
+#[cfg(feature = "format-pretty")]
+pub mod pretty;
 
 #[cfg(feature = "extract")]
 pub mod extract;

@@ -4,3 +4,6 @@ specs/parser/source-positions.md
 specs/parser/api.md
 specs/parser/differential-mode.md
 specs/migration/lexpr-deprecation.md
+specs/pretty/api.md
+specs/match-form/api.md
+specs/build/api.md
