@@ -14,7 +14,7 @@ rm -f coverage.db*
 
 # Run tests with coverage tracking
 echo "🧪 Running tests with coverage tracking..."
-SPEC_TRACE_DB=coverage.db cargo test --quiet
+SPEC_TRACE_DB=coverage.db cargo test --quiet --features format-pretty
 
 if [ ! -f "coverage.db" ]; then
   echo "❌ Error: coverage.db was not created."

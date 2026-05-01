@@ -11,11 +11,14 @@ The crate provides:
 - Extracting keyword arguments
 - Handling `(use "path")` file references
 - Serializing S-expression fragments
+- Constructor functions for `Value` (`mcp_tools::build`)
+- Form-shape pattern matching (`mcp_tools::match_form`)
 
 ### Optional Features (via feature flags)
 - **prompts** - Configuration-driven prompt building
 - **interactive** - Interactive line loops with history
 - **format** - Response formatting utilities
+- **format-pretty** - Structural pretty-printer for `Value`
 - **extract** - Type-safe argument extraction
 - **persistence** - SQLite-based logging
 - **log-viewer** - Interactive log query tool
@@ -383,6 +386,71 @@ use mcp_tools::errors::{StateError, TransitionError, DependencyError};
 ```
 
 These are example error types you can use as templates for your own error handling.
+
+---
+
+---
+
+## Constructor Functions (`mcp_tools::build`)
+
+Programmatic construction of `Value` (codegen, desugaring, error suggestions) gets verbose with raw `Value::List(vec![Value::Symbol(...), ...])`. The `build` module provides a small set of constructors:
+
+```rust
+use mcp_tools::build::{cons, list, keyword, symbol, string, integer};
+
+let v = list(vec![
+    symbol("define"),
+    symbol("counter"),
+    integer(0),
+    keyword("doc"),
+    string("a counter"),
+]);
+// v is the same Value parse_value("(define counter 0 :doc \"a counter\")") produces.
+```
+
+`cons(a, b)` always produces `Value::Pair`; use `list(...)` for proper lists. `list(vec![])` returns `Value::Nil` (empty list and `nil` are equal).
+
+See `specs/build/api.md` for the full contract.
+
+---
+
+## Form-Shape Pattern Matching (`mcp_tools::match_form`)
+
+Lowering S-expr to a typed AST involves the same "validate the form shape" boilerplate at every call site. `match_form` centralizes it:
+
+```rust
+use mcp_tools::{parse_value, match_form};
+
+let v = parse_value(r#"(define counter 0 :doc "a counter")"#)?;
+let m = match_form(&v, "define")?;
+
+let name = m.positional_at(0)?.as_symbol().unwrap();   // "counter"
+let init = m.positional_at(1)?.as_i64().unwrap();      // 0
+let doc  = m.require_keyword("doc")?.as_str().unwrap(); // "a counter"
+```
+
+`FormMatch` borrows from the input — no clones. Errors include the head symbol for context: `"define: missing required keyword :doc"`. See `specs/match-form/api.md`.
+
+---
+
+## Feature Guide: Pretty-Printer (feature = "format-pretty")
+
+Deterministic, line-wrapped `Value` rendering for human-readable config files and diff-friendly machine output.
+
+```rust
+use mcp_tools::{parse_value};
+use mcp_tools::pretty::{pretty_print, pretty_print_default, pretty_print_top_forms, PrettyOpts};
+
+let v = parse_value(r#"(define-tool foo :pred (use "p") :body (use "b") :max 3)"#)?;
+
+let s = pretty_print(&v, &PrettyOpts { max_line_width: 40, ..PrettyOpts::default() });
+// (define-tool foo
+//   :pred (use "p")
+//   :body (use "b")
+//   :max  3)
+```
+
+Defaults: 80-column line width, 2-space indent, keyword values aligned vertically, blank line between top forms. Output round-trips through `parse_value`. See `specs/pretty/api.md`.
 
 ---
 
