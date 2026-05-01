@@ -1,0 +1,178 @@
+(plan "source-position-parser"
+  :spec (use "specs/changes/2026-04-30-source-position-parser.md")
+  :goals
+  (do
+    ;; ============================================================
+    ;; Phase A — resolve the five open questions
+    ;; All decisions are independent of each other, so run in parallel.
+    ;; ============================================================
+    (parallel
+      (q-bootstrap <- decide "decide-bootstrap-infra"
+        :spec "Decide whether to bootstrap spec-trace infrastructure (specs/, spec-files.txt, build.rs, spec-trace build+runtime deps) as part of this plan, or defer to a precursor change spec. Default position: bootstrap here, since this is the first change spec in mcp-sexpr. If the decision is 'defer', abandon this plan and resume only after the precursor lands."
+        :out ((doc "bootstrap-decision")))
+      (q-reexport <- decide "decide-lexpr-reexport"
+        :spec "Decide whether mcp_tools::lexpr re-exports the lexpr crate during the 0.3 migration window so consumers do not need a separate Cargo dependency, or whether consumers must declare lexpr themselves."
+        :out ((doc "reexport-decision")))
+      (q-verbose <- decide "decide-verbose-interface"
+        :spec "Decide how discrepancy verbose mode is configured: env var only (MCP_TOOLS_DIFFERENTIAL_PARSE=verbose), API only (set_differential_mode with verbose flag), or both."
+        :out ((doc "verbose-decision")))
+      (q-tracing <- decide "decide-tracing-sink"
+        :spec "Decide whether DiscrepancySink::Tracing ships in 0.3 behind a tracing feature flag, or whether tracing integration is deferred to a later release."
+        :out ((doc "tracing-decision")))
+      (q-indexing <- decide "decide-position-indexing"
+        :spec "Decide line/column indexing convention for Position: 1-indexed for human display (most common), 0-indexed for LSP compatibility, or both via separate accessors."
+        :out ((doc "indexing-decision"))))
+
+    ;; ============================================================
+    ;; Phase B — bootstrap spec-trace infrastructure
+    ;; Gated on q-bootstrap. Sequential because each depends on the previous.
+    ;; ============================================================
+    (specs-tree <- realize "create-specs-tree"
+      :spec "Create specs/parser/ and specs/migration/ directories. This is the first specs/ content in mcp-sexpr."
+      :in ((from q-bootstrap))
+      :out ((directory "specs/parser") (directory "specs/migration")))
+    (spec-files-txt <- realize "create-spec-files-txt"
+      :spec "Create spec-files.txt at the repository root, initially empty. Permanent spec file paths are appended in a later step once the files exist."
+      :in ((from specs-tree))
+      :out ((file "spec-files.txt")))
+    (build-rs <- realize "create-build-rs"
+      :spec "Create build.rs that invokes spec-trace codegen against spec-files.txt to generate src/traceability_gen.rs (containing the SpecItem enum)."
+      :in ((from spec-files-txt))
+      :out ((file "build.rs")))
+    (cargo-deps <- transform "add-spec-trace-deps"
+      :spec "Add spec-trace as both [build-dependencies] (for codegen) and [dependencies] (for the runtime covers!() macro and SpecItem enum) in Cargo.toml."
+      :in ((from build-rs))
+      :out ((file "Cargo.toml"))
+      :preserve ("Existing crate metadata (name, version, edition, license, repository, documentation)"
+                 "All existing feature flags and their dependency relationships"
+                 "All existing runtime dependencies (anyhow, lexpr, thiserror, optional features)"))
+
+    ;; ============================================================
+    ;; Phase C — write the 6 permanent spec files
+    ;; All new files, no shared outputs, parallel-safe.
+    ;; Each spec file gates on the relevant decision from Phase A via outer-scope from-references.
+    ;; ============================================================
+    (parallel
+      (spec-grammar <- realize "spec-grammar"
+        :spec "Write specs/parser/grammar.md. Spec-ids on second-level headings: mcp-tools/parser/grammar (accepted forms — atoms, lists, dotted pairs, quotes), mcp-tools/parser/string-escapes (the five recognized escapes plus error policy), mcp-tools/parser/comments (line and block comment forms). Mark non-testable rationale sections appropriately."
+        :in ((from cargo-deps))
+        :out ((file "specs/parser/grammar.md")))
+      (spec-value-types <- realize "spec-value-types"
+        :spec "Write specs/parser/value-types.md. Spec-ids: mcp-tools/parser/value-type (Value enum), mcp-tools/parser/spanned-type (Spanned + SpannedNode), mcp-tools/parser/numeric-tower (i64/f64 only with rationale), mcp-tools/parser/keyword-canonicalization (no leading colon stored), mcp-tools/parser/list-representation (Vec-backed proper lists; Pair only for dotted)."
+        :in ((from cargo-deps))
+        :out ((file "specs/parser/value-types.md")))
+      (spec-source-positions <- realize "spec-source-positions"
+        :spec "Write specs/parser/source-positions.md. Spec-ids: mcp-tools/parser/spans (Position struct, indexing convention from q-indexing decision, byte_offset semantics, 4GB source limit), mcp-tools/parser/comment-retention (leading_comments and trailing_comments on Spanned)."
+        :in ((from cargo-deps) (from q-indexing))
+        :out ((file "specs/parser/source-positions.md")))
+      (spec-api <- realize "spec-api"
+        :spec "Write specs/parser/api.md. Spec-ids: mcp-tools/parser/parse-value (new Value-returning signature), mcp-tools/parser/parse-value-with-positions (Spanned-returning), mcp-tools/parser/lexpr-conversion (bidirectional From impls; lossy direction errors), mcp-tools/parser/api-deprecation (every lexpr::Value-based helper has a Value-based counterpart and a #[deprecated] note). Incorporate the q-reexport decision."
+        :in ((from cargo-deps) (from q-reexport))
+        :out ((file "specs/parser/api.md")))
+      (spec-differential <- realize "spec-differential"
+        :spec "Write specs/parser/differential-mode.md. Spec-ids: mcp-tools/parser/differential-mode (DifferentialMode/DiscrepancySink types, default-on policy in 0.3), mcp-tools/parser/discrepancy-reporting (Discrepancy fields, hashed-vs-verbose input handling per q-verbose, optional tracing sink per q-tracing), mcp-tools/parser/discrepancy-deduplication (LRU bound, flush API)."
+        :in ((from cargo-deps) (from q-verbose) (from q-tracing))
+        :out ((file "specs/parser/differential-mode.md")))
+      (spec-migration <- realize "spec-migration"
+        :spec "Write specs/migration/lexpr-deprecation.md. Spec-ids: mcp-tools/migration/phase-1-deprecation (0.3 surface), mcp-tools/migration/phase-2-window (0.4 deprecation window with diff-mode opt-in), mcp-tools/migration/phase-3-removal (1.0 lexpr removal and drop criteria), mcp-tools/migration/numeric-tower-loss (lexpr→Value conversion errors on out-of-range numerics), mcp-tools/migration/lexpr-conversion-lossy (consumer migration guidance for rationals/bignums)."
+        :in ((from cargo-deps))
+        :out ((file "specs/migration/lexpr-deprecation.md"))))
+
+    ;; ============================================================
+    ;; Register specs with the build system and regenerate the SpecItem enum.
+    ;; ============================================================
+    (specs-registered <- transform "register-spec-files"
+      :spec "Append all 6 new permanent spec file paths to spec-files.txt. Do NOT add the change spec at specs/changes/ — change specs are documentation only and never enter the build system."
+      :in ((from spec-grammar) (from spec-value-types) (from spec-source-positions)
+           (from spec-api) (from spec-differential) (from spec-migration))
+      :out ((file "spec-files.txt"))
+      :preserve ("All previously listed paths (initially empty on first creation)"))
+    (gen-rebuilt <- check "verify-spec-trace-gen"
+      :spec "Run cargo build to regenerate src/traceability_gen.rs. The build must succeed and the SpecItem enum must contain a variant for every testable spec-id from the new permanent specs."
+      :in ((from specs-registered))
+      :out ((doc "spec-trace-gen-ok")))
+
+    ;; ============================================================
+    ;; Phase D — implementation
+    ;; Sequential because each layer builds on the previous.
+    ;; Module structure: src/parser/{mod,types,lexer,reader,lexpr_compat,differential}.rs
+    ;; ============================================================
+    (parser-mod <- realize "create-parser-module"
+      :spec "Create src/parser/mod.rs declaring submodules (types, lexer, reader, lexpr_compat, differential) and re-exporting the public surface (Value, Spanned, Position, Span, Comment, parser entry points)."
+      :in ((from gen-rebuilt))
+      :out ((file "src/parser/mod.rs")))
+    (parser-types <- realize "impl-parser-types"
+      :spec "Implement value types in src/parser/types.rs: Value enum (Nil, Bool, Integer(i64), Float(f64), String, Symbol, Keyword, List(Vec<Value>), Pair(Box<(Value,Value)>)), Spanned struct (value + span + leading_comments + trailing_comments), SpannedNode mirror enum, Position (line/column/byte_offset per q-indexing), Span, Comment. Provide as_* accessors mirroring the lexpr::Value surface."
+      :in ((from parser-mod))
+      :out ((file "src/parser/types.rs")))
+    (parser-lexer <- realize "impl-parser-lexer"
+      :spec "Implement hand-rolled tokenizer in src/parser/lexer.rs producing a token stream with byte spans. Handles parens, dot, quotes (' ` , ,@), atoms (symbols/keywords/numbers/booleans/nil), strings with escape recognition (\\\\ \\\" \\n \\r \\t — error on others), line comments (;), block comments (#| |#), whitespace tracking. Tracks line/column for position computation."
+      :in ((from parser-types))
+      :out ((file "src/parser/lexer.rs")))
+    (parser-reader <- realize "impl-parser-reader"
+      :spec "Implement recursive-descent reader in src/parser/reader.rs producing Spanned values from the lexer's token stream. Desugars 'expr/`expr/,expr/,@expr to (quote …) etc. Handles dotted pairs, proper-list-as-Vec collection, leading/trailing comment attachment. Returns Result<Spanned> with parse errors carrying source positions."
+      :in ((from parser-lexer))
+      :out ((file "src/parser/reader.rs")))
+    (parser-lexpr-compat <- realize "impl-lexpr-conversion"
+      :spec "Implement bidirectional conversion in src/parser/lexpr_compat.rs: From<lexpr::Value> for Value (errors on rationals/complex/bignums outside i64 range — no silent truncation) and From<Value> for lexpr::Value (total). Keyword normalization collapses lexpr's mixed Keyword/Symbol(:foo) handling into canonical Keyword(name)."
+      :in ((from parser-reader))
+      :out ((file "src/parser/lexpr_compat.rs")))
+    (parser-differential <- realize "impl-differential-mode"
+      :spec "Implement DifferentialMode/DiscrepancySink/Discrepancy and the runtime comparison wrapper in src/parser/differential.rs. Reads MCP_TOOLS_DIFFERENTIAL_PARSE per q-verbose; supports Stderr/Callback (and optionally Tracing per q-tracing). Bounded LRU dedup of input hashes (default 1024). Reports first divergence with structural path. Reporting is non-fatal — caller always receives the new parser's result."
+      :in ((from parser-lexpr-compat))
+      :out ((file "src/parser/differential.rs")))
+    (public-api <- transform "wire-public-api"
+      :spec "Wire the new parser into the public API. In src/lib.rs: rename existing parse_value to parse_value_lexpr (mark #[deprecated]); add new parse_value -> Result<Value> and parse_value_with_positions -> Result<Spanned> routed through src/parser/ with differential-mode wrapping; add Value-based counterparts for every existing helper (get_kw_value, get_kw_str, require_kw_str, iter_list, parse_str_list, parse_text_ref, render_text_ref) and mark the lexpr::Value versions #[deprecated]. In src/extract/args.rs and src/format/response.rs: update internal callers to use the deprecated _lexpr forms (or new Value forms where straightforward) so the workspace continues to compile."
+      :in ((from parser-differential))
+      :out ((file "src/lib.rs") (file "src/extract/args.rs") (file "src/format/response.rs"))
+      :preserve ("src/lib.rs: every existing public function remains callable (with deprecation warnings) until 1.0; TextRef enum, quote_str, render_list semantics unchanged; existing in-module unit tests pass without modification beyond expected deprecation warnings"
+                 "src/extract/args.rs: parse_tool_call and the require_*/get_* helpers continue to return their existing types under deprecation; behavior on existing test inputs is byte-for-byte identical"
+                 "src/format/response.rs: format_success/format_error/format_complete/format_blocked/serialize_string_list/serialize_resource produce identical output strings for identical inputs"
+                 "Differential mode default-on with stderr sink; no consumer-visible behavior change beyond compiler deprecation warnings"))
+
+    ;; ============================================================
+    ;; Phase E — tests with covers!() linking each new spec-id
+    ;; All new test files; parallel-safe.
+    ;; ============================================================
+    (parallel
+      (tests-grammar <- realize "tests-grammar"
+        :spec "Add tests/parser_grammar.rs covering atoms, lists, dotted pairs, quote forms, all five recognized string escapes, error on unrecognized backslash escapes, line comments, block comments. covers!([McpToolsParserGrammar, McpToolsParserStringEscapes, McpToolsParserComments])."
+        :in ((from public-api))
+        :out ((file "tests/parser_grammar.rs")))
+      (tests-types <- realize "tests-types"
+        :spec "Add tests/parser_types.rs covering Value construction, Spanned::into_value, numeric-tower limits at i64 boundary (no rational support), keyword canonicalization (no leading colon), Vec-backed list ergonomics, Pair only for dotted forms. covers!([McpToolsParserValueType, McpToolsParserSpannedType, McpToolsParserNumericTower, McpToolsParserKeywordCanonicalization, McpToolsParserListRepresentation])."
+        :in ((from public-api))
+        :out ((file "tests/parser_types.rs")))
+      (tests-positions <- realize "tests-positions"
+        :spec "Add tests/parser_positions.rs covering Span correctness on nested forms, multi-byte char position handling, CRLF handling, indexing convention from q-indexing, leading/trailing comment retention through parse-and-walk. covers!([McpToolsParserSpans, McpToolsParserCommentRetention])."
+        :in ((from public-api))
+        :out ((file "tests/parser_positions.rs")))
+      (tests-api <- realize "tests-api"
+        :spec "Add tests/parser_api.rs covering parse_value -> Value, parse_value_with_positions -> Spanned, parse_value_lexpr backward compatibility, error round-trip. Use trybuild to confirm #[deprecated] attributes are present on the lexpr-based public surface. covers!([McpToolsParserParseValue, McpToolsParserParseValueWithPositions, McpToolsParserApiDeprecation])."
+        :in ((from public-api))
+        :out ((file "tests/parser_api.rs")))
+      (tests-conversion <- realize "tests-lexpr-conversion"
+        :spec "Add tests/parser_lexpr_conversion.rs covering Value -> lexpr::Value (round-trip equality), lexpr::Value -> Value with errors on rationals/complex/bignums (no silent truncation), keyword/symbol disambiguation. covers!([McpToolsParserLexprConversion, McpToolsMigrationNumericTowerLoss, McpToolsMigrationLexprConversionLossy])."
+        :in ((from public-api))
+        :out ((file "tests/parser_lexpr_conversion.rs")))
+      (tests-differential <- realize "tests-differential"
+        :spec "Add tests/parser_differential.rs covering sink dispatch (Stderr, Callback, optional Tracing), LRU dedup behavior at the bound, env var override per q-verbose, non-fatal reporting (caller always receives a result). covers!([McpToolsParserDifferentialMode, McpToolsParserDiscrepancyReporting, McpToolsParserDiscrepancyDeduplication])."
+        :in ((from public-api))
+        :out ((file "tests/parser_differential.rs"))))
+
+    ;; ============================================================
+    ;; Phase F — differential CI corpus
+    ;; ============================================================
+    (corpus <- realize "seed-differential-corpus"
+      :spec "Create tests/compat_corpus/ with curated S-expression inputs covering edge cases: numeric tower (integers, floats, negatives, i64 boundary), all string escapes plus unicode and control chars, dotted pairs at varying depths, deeply nested lists, line and block comments mixed with values, keyword/symbol distinction. Add tests/parser_differential_corpus.rs that for every input asserts lexpr::from_str(input) structurally equals lexpr::Value::from(parse_value(input)?). Seeds the long-term differential-test harness."
+      :in ((from tests-grammar) (from tests-types) (from tests-positions)
+           (from tests-api) (from tests-conversion) (from tests-differential))
+      :out ((directory "tests/compat_corpus") (file "tests/parser_differential_corpus.rs")))
+
+    ;; ============================================================
+    ;; Phase G — final verification gate
+    ;; ============================================================
+    (check "verify-build-and-coverage"
+      :spec "Final gate: SPEC_TRACE_DB=coverage.db cargo test must succeed; bin/check_coverage.sh must report coverage for every testable spec-id introduced by this change spec; the differential corpus run must report zero discrepancies."
+      :in ((from corpus))
+      :out ((doc "0.3-implementation-verified")))))

@@ -15,6 +15,9 @@ anyhow = "1.0"
 lexpr = "0.2"
 thiserror = "1.0"
 
+# Spec traceability (runtime: covers!() macro and SpecItem enum)
+spec-trace = { git = "ssh://git@github.com/ywata/spec-trace" }
+
 # Optional dependencies for features
 serde = { version = "1.0", features = ["derive"], optional = true }
 toml = { version = "0.8", optional = true }
@@ -22,8 +25,11 @@ rustyline = { version = "14.0", optional = true }
 tokio = { version = "1.48", features = ["sync"], optional = true }
 rusqlite = { version = "0.31", features = ["bundled"], optional = true }
 
+[build-dependencies]
+spec-trace = { git = "ssh://git@github.com/ywata/spec-trace" }
+
 [features]
-default = ["sexpr"]
+default = ["sexpr", "runtime-coverage"]
 sexpr = []
 prompts = ["serde", "toml"]
 interactive = ["rustyline"]
@@ -34,6 +40,7 @@ persistence = ["rusqlite"]
 log-viewer = ["persistence", "interactive"]
 router = []
 errors = []
+runtime-coverage = ["spec-trace/runtime-coverage"]
 all = ["sexpr", "prompts", "interactive", "interactive-async", "format", "extract", "persistence", "log-viewer", "router", "errors"]
 
 [dev-dependencies]

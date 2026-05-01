@@ -1,0 +1,7 @@
+((empty-list ())
+ (single (a))
+ (proper-list (a b c))
+ (dotted (a . b))
+ (nested-dotted ((a . b) (c . d)))
+ (deep (a (b (c (d (e))))))
+ (mixed (1 "two" three :four)))

@@ -1,0 +1,6 @@
+specs/parser/grammar.md
+specs/parser/value-types.md
+specs/parser/source-positions.md
+specs/parser/api.md
+specs/parser/differential-mode.md
+specs/migration/lexpr-deprecation.md

@@ -1,0 +1,8 @@
+; Line comment at the top of the file
+(forms
+  ; comment between forms
+  (a b c)
+  ; another comment
+  (x ; trailing inline comment
+     y
+     z))
