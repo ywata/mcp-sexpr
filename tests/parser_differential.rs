@@ -12,8 +12,8 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use common::{covers, SpecItem};
 use mcp_tools::{
     current_differential_mode, flush_discrepancy_dedup, parse_value, set_differential_mode,
-    set_discrepancy_dedup_capacity, DifferentialMode, Discrepancy, DiscrepancyInput,
-    DiscrepancySink,
+    set_discrepancy_class_dedup_capacity, set_discrepancy_dedup_capacity, DifferentialMode,
+    Discrepancy, DiscrepancyInput, DiscrepancySink,
 };
 
 fn test_lock() -> MutexGuard<'static, ()> {
@@ -226,4 +226,206 @@ fn reporting_is_non_fatal_caller_always_receives_new_parser_result() {
 
     set_differential_mode(DifferentialMode::Off);
     flush_discrepancy_dedup();
+}
+
+// ---------------------------------------------------------------------------
+// Expected discrepancy classes (mcp-tools/parser/expected-discrepancy-classes)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn keyword_argument_is_an_expected_class_not_a_discrepancy() {
+    covers!([SpecItem::McpToolsParserExpectedDiscrepancyClasses]);
+    let _guard = test_lock();
+
+    let recorded = install_callback();
+    let result = parse_value("(tool :key \"v\")");
+    assert!(result.is_ok());
+    assert!(
+        recorded.lock().unwrap().is_empty(),
+        "Keyword vs lexpr Symbol(\":key\") must be suppressed as an expected class"
+    );
+
+    set_differential_mode(DifferentialMode::Off);
+    flush_discrepancy_dedup();
+}
+
+#[test]
+fn dotted_keywords_are_an_expected_class() {
+    covers!([SpecItem::McpToolsParserExpectedDiscrepancyClasses]);
+    let _guard = test_lock();
+
+    let recorded = install_callback();
+    let result = parse_value("(:a . :b)");
+    assert!(result.is_ok());
+    assert!(recorded.lock().unwrap().is_empty());
+
+    set_differential_mode(DifferentialMode::Off);
+    flush_discrepancy_dedup();
+}
+
+#[test]
+fn deeply_nested_keyword_is_an_expected_class() {
+    covers!([SpecItem::McpToolsParserExpectedDiscrepancyClasses]);
+    let _guard = test_lock();
+
+    let recorded = install_callback();
+    let result = parse_value("(a (b (c :deep)))");
+    assert!(result.is_ok());
+    assert!(recorded.lock().unwrap().is_empty());
+
+    set_differential_mode(DifferentialMode::Off);
+    flush_discrepancy_dedup();
+}
+
+// ---------------------------------------------------------------------------
+// Class-keyed deduplication (mcp-tools/parser/discrepancy-class-deduplication)
+// ---------------------------------------------------------------------------
+
+/// Callback sink with both caches at known capacities (input 1024, class as
+/// given) and both flushed.
+fn install_callback_with_class_capacity(class_capacity: usize) -> Arc<Mutex<Vec<Discrepancy>>> {
+    let recorded = install_callback();
+    set_discrepancy_dedup_capacity(1024);
+    set_discrepancy_class_dedup_capacity(class_capacity);
+    flush_discrepancy_dedup();
+    recorded
+}
+
+fn restore_defaults() {
+    set_discrepancy_class_dedup_capacity(256);
+    set_differential_mode(DifferentialMode::Off);
+    flush_discrepancy_dedup();
+}
+
+/// A distinct bignum per `i`: new parser errors (IntegerOutOfRange), lexpr
+/// accepts. One class for every `i`.
+fn bignum(i: usize) -> String {
+    format!("3689348814741910323{i}")
+}
+
+#[test]
+fn class_dedup_collapses_distinct_inputs_of_one_class() {
+    covers!([SpecItem::McpToolsParserDiscrepancyClassDeduplication]);
+    let _guard = test_lock();
+
+    let recorded = install_callback_with_class_capacity(256);
+    for i in 0..100 {
+        let _ = parse_value(&bignum(i));
+    }
+    assert_eq!(
+        recorded.lock().unwrap().len(),
+        1,
+        "100 distinct inputs of one class must yield exactly one report"
+    );
+
+    restore_defaults();
+}
+
+#[test]
+fn class_dedup_distinguishes_divergence_position() {
+    covers!([SpecItem::McpToolsParserDiscrepancyClassDeduplication]);
+    let _guard = test_lock();
+
+    let recorded = install_callback_with_class_capacity(256);
+    // `nil` is Nil for the new parser and Symbol("nil") for lexpr: a both-Ok
+    // divergence whose path is the list position.
+    let _ = parse_value("(a nil)"); // 1.atom
+    let _ = parse_value("(a b nil)"); // 2.atom
+
+    let captured = recorded.lock().unwrap();
+    let paths: Vec<String> = captured.iter().map(|d| d.path.to_string()).collect();
+    assert_eq!(paths, vec!["1.atom".to_string(), "2.atom".to_string()]);
+    drop(captured);
+
+    restore_defaults();
+}
+
+#[test]
+fn class_dedup_does_not_double_count_repeated_input() {
+    covers!([SpecItem::McpToolsParserDiscrepancyClassDeduplication]);
+    let _guard = test_lock();
+
+    let recorded = install_callback_with_class_capacity(256);
+    let _ = parse_value(&bignum(0));
+    let _ = parse_value(&bignum(0));
+    assert_eq!(recorded.lock().unwrap().len(), 1);
+
+    restore_defaults();
+}
+
+#[test]
+fn class_dedup_capacity_zero_disables_class_dedup() {
+    covers!([SpecItem::McpToolsParserDiscrepancyClassDeduplication]);
+    let _guard = test_lock();
+
+    let recorded = install_callback_with_class_capacity(0);
+    for i in 0..100 {
+        let _ = parse_value(&bignum(i));
+    }
+    assert_eq!(
+        recorded.lock().unwrap().len(),
+        100,
+        "with class dedup disabled, every input-cache miss is dispatched"
+    );
+
+    restore_defaults();
+}
+
+#[test]
+fn class_dedup_evicts_least_recently_seen_class() {
+    covers!([SpecItem::McpToolsParserDiscrepancyClassDeduplication]);
+    let _guard = test_lock();
+
+    let recorded = install_callback_with_class_capacity(2);
+    // Three classes in rotation, each time with a fresh input so the input
+    // cache never intervenes: A = 1.atom, B = 2.atom, C = bignum (Err/Ok).
+    let _ = parse_value("(a nil)"); // A: reported (1)
+    let _ = parse_value("(a b nil)"); // B: reported (2)
+    let _ = parse_value(&bignum(0)); // C: reported (3); A evicted
+    let _ = parse_value("(x nil)"); // A again: reported (4); B evicted
+    let _ = parse_value("(x y nil)"); // B again: reported (5)
+    let _ = parse_value("(z nil)"); // A: still cached -> suppressed
+
+    let captured = recorded.lock().unwrap();
+    let paths: Vec<String> = captured.iter().map(|d| d.path.to_string()).collect();
+    assert_eq!(
+        paths,
+        vec!["1.atom", "2.atom", ".", "1.atom", "2.atom"]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>()
+    );
+    drop(captured);
+
+    restore_defaults();
+}
+
+// ---------------------------------------------------------------------------
+// Stderr report budget (mcp-tools/parser/stderr-report-budget)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn stderr_sink_is_bounded_and_never_blocks_the_caller() {
+    covers!([SpecItem::McpToolsParserStderrReportBudget]);
+    let _guard = test_lock();
+
+    assert_eq!(mcp_tools::STDERR_REPORT_BUDGET, 64);
+
+    // Push well past the budget through the real Stderr sink (the harness
+    // captures stderr). Every parse must return promptly with the new parser's
+    // outcome; past the budget the sink drops before formatting.
+    set_differential_mode(DifferentialMode::On {
+        sink: DiscrepancySink::Stderr,
+        verbose: false,
+    });
+    set_discrepancy_dedup_capacity(1024);
+    set_discrepancy_class_dedup_capacity(0);
+    flush_discrepancy_dedup();
+
+    for i in 0..(mcp_tools::STDERR_REPORT_BUDGET + 10) {
+        let outcome = parse_value(&bignum(i));
+        assert!(outcome.is_err(), "caller must still see the new parser's Err");
+    }
+
+    restore_defaults();
 }

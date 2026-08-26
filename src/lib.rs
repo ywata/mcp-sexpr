@@ -65,7 +65,7 @@ pub use match_form::{match_form, FormMatch};
 
 pub use parser::{
     current_differential_mode, flush_discrepancy_dedup, parse_value_with_positions,
-    set_differential_mode, set_discrepancy_dedup_capacity, Comment, CommentKind, DifferentialMode,
+    set_differential_mode, set_discrepancy_class_dedup_capacity, set_discrepancy_dedup_capacity, Comment, CommentKind, DifferentialMode, STDERR_REPORT_BUDGET,
     Discrepancy, DiscrepancyInput, DiscrepancySink, LexprConversionError, ParseError, PathElement,
     Position, Span, Spanned, SpannedNode, StructuralPath, Value,
 };

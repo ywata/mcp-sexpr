@@ -15,7 +15,7 @@ In the 0.3 release:
 - The previous `lexpr::Value`-returning parser is renamed `parse_value_lexpr` and marked `#[deprecated(note = "use parse_value -> Value; lexpr::Value is removed in 1.0")]`.
 - Every keyword/list helper (`get_kw_value`, `get_kw_str`, `require_kw_str`, `iter_list`, `parse_str_list`, `parse_text_ref`) gains a `Value`-based version under the unsuffixed name; the original `lexpr::Value` version is renamed with a `_lexpr` suffix and marked deprecated.
 - Bidirectional conversion impls ship: `From<Value> for lexpr::Value` (total) and `TryFrom<lexpr::Value> for Value` (lossy).
-- Differential validation runs default-on, sink `Stderr`, hashed inputs.
+- Differential validation runs default-on, sink `Stderr`, hashed inputs. The exact version range in which default-on applies is stated in `specs/parser/differential-mode.md` under **Version Applicability** (`>= 0.3.0, < 0.4.0`).
 - `lexpr` remains a runtime dependency in `Cargo.toml` because the differential validator and conversion impls both need it.
 - `mcp-tools` does **not** re-export the `lexpr` crate. Consumers that need lexpr during the migration declare it directly: `lexpr = "0.2"`.
 
