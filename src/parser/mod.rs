@@ -26,6 +26,6 @@ pub use reader::{parse_value, parse_value_with_positions, ParseError};
 pub use lexpr_compat::LexprConversionError;
 pub use differential::{
     current_differential_mode, flush_discrepancy_dedup, set_differential_mode,
-    set_discrepancy_dedup_capacity, DifferentialMode, Discrepancy, DiscrepancyInput,
+    set_discrepancy_class_dedup_capacity, set_discrepancy_dedup_capacity, DifferentialMode, Discrepancy, DiscrepancyInput, STDERR_REPORT_BUDGET,
     DiscrepancySink, PathElement, StructuralPath,
 };

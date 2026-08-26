@@ -7,6 +7,7 @@
 use std::collections::VecDeque;
 use std::env;
 use std::fmt;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -78,11 +79,11 @@ pub enum DiscrepancyInput {
 }
 
 /// Path to the first divergence within a parsed tree.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StructuralPath(pub Vec<PathElement>);
 
 /// Single hop along a [`StructuralPath`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PathElement {
     /// Child `i` of a list disagrees.
     ListIndex(usize),
@@ -166,20 +167,70 @@ pub struct Discrepancy {
 }
 
 const DEFAULT_DEDUP_CAPACITY: usize = 1024;
+const DEFAULT_CLASS_DEDUP_CAPACITY: usize = 256;
+
+/// The *class* of a discrepancy: where it diverged and which variant pair
+/// disagreed, independent of the input's contents. A second dedup key so that
+/// many distinct payloads exhibiting one grammar-level difference produce one
+/// report. See `specs/parser/differential-mode.md` § Discrepancy Class
+/// Deduplication.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct DiscrepancyClass {
+    /// As reported, list indices included: `1.atom` and `2.atom` differ.
+    path: StructuralPath,
+    new_kind: NewKind,
+    lexpr_kind: LexprSideKind,
+}
+
+/// New-parser side of a class: the value variant, or the error kind.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum NewKind {
+    Ok(ValueKind),
+    Err(String),
+}
+
+/// lexpr side of a class: the value variant, or an error (messages are not
+/// part of the class — they vary per input).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum LexprSideKind {
+    Ok(LexprKind),
+    Err,
+}
+
+impl DiscrepancyClass {
+    fn of(report: &Discrepancy) -> Self {
+        DiscrepancyClass {
+            path: report.path.clone(),
+            new_kind: match &report.new_value {
+                Ok(v) => NewKind::Ok(ValueKind::of(v)),
+                Err(e) => NewKind::Err(e.kind.clone()),
+            },
+            lexpr_kind: match &report.lexpr_value {
+                Ok(v) => LexprSideKind::Ok(LexprKind::of(v)),
+                Err(_) => LexprSideKind::Err,
+            },
+        }
+    }
+}
 
 struct GlobalState {
     mode: RwLock<DifferentialMode>,
-    dedup: Mutex<DedupCache>,
+    /// Keyed by SHA-256 of the input.
+    dedup: Mutex<DedupCache<[u8; 32]>>,
+    /// Keyed by discrepancy class.
+    class_dedup: Mutex<DedupCache<DiscrepancyClass>>,
     initialized: OnceLock<()>,
 }
 
-struct DedupCache {
+/// Bounded LRU set. Small capacities and equality-keyed lookups make a linear
+/// scan over a `VecDeque` adequate.
+struct DedupCache<K> {
     capacity: usize,
-    /// Most-recently-seen hashes at the back, least-recently-seen at the front.
-    items: VecDeque<[u8; 32]>,
+    /// Most-recently-seen keys at the back, least-recently-seen at the front.
+    items: VecDeque<K>,
 }
 
-impl DedupCache {
+impl<K: PartialEq> DedupCache<K> {
     fn new(capacity: usize) -> Self {
         DedupCache {
             capacity,
@@ -187,21 +238,21 @@ impl DedupCache {
         }
     }
 
-    /// Returns `true` if the hash was already present (reporter should skip);
+    /// Returns `true` if the key was already present (reporter should skip);
     /// also refreshes its position to most-recently-used.
-    fn record(&mut self, hash: [u8; 32]) -> bool {
+    fn record(&mut self, key: K) -> bool {
         if self.capacity == 0 {
             return false;
         }
-        if let Some(pos) = self.items.iter().position(|h| h == &hash) {
+        if let Some(pos) = self.items.iter().position(|k| k == &key) {
             self.items.remove(pos);
-            self.items.push_back(hash);
+            self.items.push_back(key);
             return true;
         }
         if self.items.len() >= self.capacity {
             self.items.pop_front();
         }
-        self.items.push_back(hash);
+        self.items.push_back(key);
         false
     }
 
@@ -222,6 +273,7 @@ fn state() -> &'static GlobalState {
     STATE.get_or_init(|| GlobalState {
         mode: RwLock::new(DifferentialMode::Off),
         dedup: Mutex::new(DedupCache::new(DEFAULT_DEDUP_CAPACITY)),
+        class_dedup: Mutex::new(DedupCache::new(DEFAULT_CLASS_DEDUP_CAPACITY)),
         initialized: OnceLock::new(),
     })
 }
@@ -290,10 +342,22 @@ pub fn set_discrepancy_dedup_capacity(capacity: usize) {
     }
 }
 
-/// Clear the discrepancy dedup LRU. After this call, every input — including those
-/// previously reported — may report again on the next parse.
+/// Resize the discrepancy *class* dedup LRU. `0` disables class deduplication
+/// (every input-cache miss is dispatched).
+pub fn set_discrepancy_class_dedup_capacity(capacity: usize) {
+    if let Ok(mut guard) = state().class_dedup.lock() {
+        guard.resize(capacity);
+    }
+}
+
+/// Clear both discrepancy dedup LRUs (input-hash and class). After this call,
+/// every input — including those previously reported — may report again on the
+/// next parse.
 pub fn flush_discrepancy_dedup() {
     if let Ok(mut guard) = state().dedup.lock() {
+        guard.flush();
+    }
+    if let Ok(mut guard) = state().class_dedup.lock() {
         guard.flush();
     }
 }
@@ -321,11 +385,11 @@ pub fn record_discrepancy_if_diverging(
     };
 
     let hash = sha256_bytes(input.as_bytes());
-    let already_reported = match state().dedup.lock() {
+    let input_seen = match state().dedup.lock() {
         Ok(mut guard) => guard.record(hash),
         Err(_) => false,
     };
-    if already_reported {
+    if input_seen {
         return Ok(());
     }
 
@@ -349,7 +413,15 @@ pub fn record_discrepancy_if_diverging(
         path,
     };
 
-    dispatch(&sink, &report)
+    let class_seen = match state().class_dedup.lock() {
+        Ok(mut guard) => guard.record(DiscrepancyClass::of(&report)),
+        Err(_) => false,
+    };
+    if class_seen {
+        return Ok(());
+    }
+
+    dispatch(&sink, verbose, &report)
 }
 
 /// Failure to dispatch a discrepancy report (callback panicked, etc.).
@@ -359,34 +431,243 @@ pub enum DiscrepancyDispatchError {
     SinkPanicked,
 }
 
-fn dispatch(sink: &DiscrepancySink, report: &Discrepancy) -> Result<(), DiscrepancyDispatchError> {
+fn dispatch(
+    sink: &DiscrepancySink,
+    verbose: bool,
+    report: &Discrepancy,
+) -> Result<(), DiscrepancyDispatchError> {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match sink {
-        DiscrepancySink::Stderr => write_stderr(report),
+        DiscrepancySink::Stderr => write_stderr(report, verbose),
         DiscrepancySink::Callback(cb) => cb(report),
     }));
     result.map_err(|_| DiscrepancyDispatchError::SinkPanicked)
 }
 
-fn write_stderr(report: &Discrepancy) {
-    let new_repr = match &report.new_value {
+/// Variant name of a [`Value`], with no payload.
+///
+/// The `of` match is exhaustive on purpose: adding a `Value` variant must be a
+/// compile error here, not a silently unclassified report.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum ValueKind {
+    Nil,
+    Bool,
+    Integer,
+    Float,
+    String,
+    Symbol,
+    Keyword,
+    List,
+    Pair,
+}
+
+impl ValueKind {
+    pub(crate) fn of(v: &Value) -> Self {
+        match v {
+            Value::Nil => ValueKind::Nil,
+            Value::Bool(_) => ValueKind::Bool,
+            Value::Integer(_) => ValueKind::Integer,
+            Value::Float(_) => ValueKind::Float,
+            Value::String(_) => ValueKind::String,
+            Value::Symbol(_) => ValueKind::Symbol,
+            Value::Keyword(_) => ValueKind::Keyword,
+            Value::List(_) => ValueKind::List,
+            Value::Pair(_) => ValueKind::Pair,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            ValueKind::Nil => "Nil",
+            ValueKind::Bool => "Bool",
+            ValueKind::Integer => "Integer",
+            ValueKind::Float => "Float",
+            ValueKind::String => "String",
+            ValueKind::Symbol => "Symbol",
+            ValueKind::Keyword => "Keyword",
+            ValueKind::List => "List",
+            ValueKind::Pair => "Pair",
+        }
+    }
+}
+
+impl fmt::Display for ValueKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// Variant name of a [`lexpr::Value`], with no payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum LexprKind {
+    Nil,
+    Null,
+    Bool,
+    Number,
+    Char,
+    String,
+    Symbol,
+    Keyword,
+    Bytes,
+    Cons,
+    Vector,
+}
+
+impl LexprKind {
+    pub(crate) fn of(v: &lexpr::Value) -> Self {
+        match v {
+            lexpr::Value::Nil => LexprKind::Nil,
+            lexpr::Value::Null => LexprKind::Null,
+            lexpr::Value::Bool(_) => LexprKind::Bool,
+            lexpr::Value::Number(_) => LexprKind::Number,
+            lexpr::Value::Char(_) => LexprKind::Char,
+            lexpr::Value::String(_) => LexprKind::String,
+            lexpr::Value::Symbol(_) => LexprKind::Symbol,
+            lexpr::Value::Keyword(_) => LexprKind::Keyword,
+            lexpr::Value::Bytes(_) => LexprKind::Bytes,
+            lexpr::Value::Cons(_) => LexprKind::Cons,
+            lexpr::Value::Vector(_) => LexprKind::Vector,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            LexprKind::Nil => "Nil",
+            LexprKind::Null => "Null",
+            LexprKind::Bool => "Bool",
+            LexprKind::Number => "Number",
+            LexprKind::Char => "Char",
+            LexprKind::String => "String",
+            LexprKind::Symbol => "Symbol",
+            LexprKind::Keyword => "Keyword",
+            LexprKind::Bytes => "Bytes",
+            LexprKind::Cons => "Cons",
+            LexprKind::Vector => "Vector",
+        }
+    }
+}
+
+impl fmt::Display for LexprKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// Hashed-mode token for the new-parser side: variant name, or `Err(<kind>)`
+/// with no message (messages can quote the input).
+fn new_kind_token(v: &Result<Value, ParseErrorRepr>) -> String {
+    match v {
+        Ok(v) => ValueKind::of(v).to_string(),
+        Err(e) => format!("Err({})", e.kind),
+    }
+}
+
+/// Hashed-mode token for the lexpr side: variant name, or the bare `Err`.
+fn lexpr_kind_token(v: &Result<lexpr::Value, String>) -> String {
+    match v {
+        Ok(v) => LexprKind::of(v).to_string(),
+        Err(_) => "Err".to_string(),
+    }
+}
+
+/// Verbose-mode representation: full one-line debug / `Err(<kind>: <message>)`.
+fn new_full_repr(v: &Result<Value, ParseErrorRepr>) -> String {
+    match v {
         Ok(v) => format!("Ok({:?})", v),
         Err(e) => format!("Err({}: {})", e.kind, e.message),
-    };
-    let lexpr_repr = match &report.lexpr_value {
+    }
+}
+
+fn lexpr_full_repr(v: &Result<lexpr::Value, String>) -> String {
+    match v {
         Ok(v) => format!("Ok({:?})", v),
         Err(e) => format!("Err({})", e),
+    }
+}
+
+/// Render a discrepancy as the text the `Stderr` sink writes (trailing newline
+/// included). Pure; the sink does nothing but write the result.
+///
+/// Hashed-mode invariant (`verbose == false`): no byte of the source string, and
+/// no byte derived from it other than its SHA-256, appears in the output. See
+/// `specs/parser/differential-mode.md` § Stderr sink format.
+pub(crate) fn format_report(report: &Discrepancy, verbose: bool) -> String {
+    let (new_repr, lexpr_repr) = if verbose {
+        (
+            new_full_repr(&report.new_value),
+            lexpr_full_repr(&report.lexpr_value),
+        )
+    } else {
+        (
+            new_kind_token(&report.new_value),
+            lexpr_kind_token(&report.lexpr_value),
+        )
     };
-    eprintln!(
-        "[mcp-tools differential] new={} lexpr={} path={}",
-        new_repr, lexpr_repr, report.path
-    );
-    match &report.input {
-        DiscrepancyInput::Verbose { source } => {
-            eprintln!("  input={}", source);
-        }
-        DiscrepancyInput::Hashed { sha256 } => {
-            eprintln!("  input-sha256={}", hex(sha256));
-        }
+    let input_line = match &report.input {
+        DiscrepancyInput::Verbose { source } => format!("  input={}", source),
+        DiscrepancyInput::Hashed { sha256 } => format!("  input-sha256={}", hex(sha256)),
+    };
+    format!(
+        "[mcp-tools differential] new={} lexpr={} path={}\n{}\n",
+        new_repr, lexpr_repr, report.path, input_line
+    )
+}
+
+/// Maximum number of reports the `Stderr` sink writes per process. After the
+/// budget is spent one terminal line is written and every later report is
+/// dropped before formatting, so total stderr output from this module is
+/// bounded (< 16 KB) and an undrained stderr pipe can never block the consumer.
+///
+/// Deliberately a constant, not a setter: a configurable budget would invite
+/// consumers to reopen the hazard. See
+/// `specs/parser/differential-mode.md` § Stderr Report Budget.
+pub const STDERR_REPORT_BUDGET: usize = 64;
+
+/// Process-wide count of reports the `Stderr` sink has been asked to write.
+/// Monotonic; never reset by `set_differential_mode`.
+static STDERR_REPORTS_REQUESTED: AtomicUsize = AtomicUsize::new(0);
+
+/// What the `Stderr` sink does with the report whose ordinal is `count_before`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BudgetDecision {
+    /// Within budget: write the formatted report.
+    Emit,
+    /// The first report past the budget: write the terminal line only.
+    EmitExhausted,
+    /// Past the terminal line: write nothing, do not format.
+    Drop,
+}
+
+/// Pure budget rule over the pre-increment counter value.
+pub(crate) fn budget_decision(count_before: usize, budget: usize) -> BudgetDecision {
+    match count_before.cmp(&budget) {
+        std::cmp::Ordering::Less => BudgetDecision::Emit,
+        std::cmp::Ordering::Equal => BudgetDecision::EmitExhausted,
+        std::cmp::Ordering::Greater => BudgetDecision::Drop,
+    }
+}
+
+/// The single line written when the budget is exhausted.
+pub(crate) fn budget_exhausted_line() -> String {
+    format!(
+        "[mcp-tools differential] report budget ({}) exhausted; further reports suppressed. \
+         Use DiscrepancySink::Callback or MCP_TOOLS_DIFFERENTIAL_PARSE=off.",
+        STDERR_REPORT_BUDGET
+    )
+}
+
+/// Number of reports the `Stderr` sink has been asked to write so far in this
+/// process (including those dropped). Test hook; tests reason in deltas.
+#[cfg(test)]
+pub(crate) fn stderr_reports_requested() -> usize {
+    STDERR_REPORTS_REQUESTED.load(Ordering::Relaxed)
+}
+
+fn write_stderr(report: &Discrepancy, verbose: bool) {
+    let count_before = STDERR_REPORTS_REQUESTED.fetch_add(1, Ordering::Relaxed);
+    match budget_decision(count_before, STDERR_REPORT_BUDGET) {
+        BudgetDecision::Emit => eprint!("{}", format_report(report, verbose)),
+        BudgetDecision::EmitExhausted => eprintln!("{}", budget_exhausted_line()),
+        BudgetDecision::Drop => {}
     }
 }
 
@@ -411,6 +692,22 @@ fn compare(
     }
 }
 
+/// Expected-class table: `(new, lexpr)` pairs that differ only in
+/// representation, where the new parser's reading is the canonical form.
+/// These are not discrepancies. Deliberately asymmetric — a new-parser
+/// `Symbol(":k")` against a lexpr `Keyword("k")` is still reported, because it
+/// would mean the new parser failed to canonicalise a keyword.
+///
+/// See `specs/parser/differential-mode.md` § Expected Discrepancy Classes.
+fn is_expected_class(new: &Value, lexpr_v: &lexpr::Value) -> bool {
+    match (new, lexpr_v) {
+        (Value::Keyword(k), lexpr::Value::Symbol(s)) => s
+            .strip_prefix(':')
+            .is_some_and(|rest| rest == k.as_str()),
+        _ => false,
+    }
+}
+
 fn compare_values(
     new: &Value,
     lexpr_v: &lexpr::Value,
@@ -427,6 +724,7 @@ fn compare_values(
         (Value::String(a), lexpr::Value::String(b)) if a.as_str() == b.as_ref() => None,
         (Value::Symbol(a), lexpr::Value::Symbol(b)) if a.as_str() == b.as_ref() => None,
         (Value::Keyword(a), lexpr::Value::Keyword(b)) if a.as_str() == b.as_ref() => None,
+        (n, l) if is_expected_class(n, l) => None,
         (Value::List(items), v) if v.is_list() => compare_list(items, v, path),
         (Value::Pair(pair), lexpr::Value::Cons(cons)) => {
             path.push(PathElement::PairCar);
@@ -583,6 +881,15 @@ mod tests {
         };
     }
 
+    /// Serialises the tests that touch process-global state (the differential
+    /// mode, the dedup cache, the stderr report counter).
+    fn global_state_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    }
+
     fn make_callback() -> (Arc<Mutex<Vec<Discrepancy>>>, DiscrepancySink) {
         let recorded = Arc::new(Mutex::new(Vec::new()));
         let recorded_for_cb = Arc::clone(&recorded);
@@ -590,6 +897,202 @@ mod tests {
             recorded_for_cb.lock().unwrap().push(d.clone());
         }));
         (recorded, cb)
+    }
+
+    #[test]
+    fn keyword_vs_colon_symbol_is_expected_class() {
+        covers!([SpecItem::McpToolsParserExpectedDiscrepancyClasses]);
+
+        let new = Value::Keyword("k".to_string());
+        let old = lexpr::Value::symbol(":k");
+        assert!(is_expected_class(&new, &old));
+        assert!(compare_values(&new, &old, &mut Vec::new()).is_none());
+    }
+
+    #[test]
+    fn expected_class_is_not_symmetric() {
+        covers!([SpecItem::McpToolsParserExpectedDiscrepancyClasses]);
+
+        // The reverse pair — the new parser failing to canonicalise a keyword —
+        // must still be reported at `atom`.
+        let new = Value::Symbol(":k".to_string());
+        let old = lexpr::Value::keyword("k");
+        assert!(!is_expected_class(&new, &old));
+        let path = compare_values(&new, &old, &mut Vec::new());
+        assert_eq!(path, Some(StructuralPath(vec![PathElement::Atom])));
+
+        // And a colon-symbol whose name does not match is not expected either.
+        let new = Value::Keyword("k".to_string());
+        let old = lexpr::Value::symbol(":other");
+        assert!(!is_expected_class(&new, &old));
+    }
+
+    const SENTINEL: &str = "SECRET-9f3a";
+
+    /// A discrepancy whose payloads (both trees, the error message, and the
+    /// verbose source) all carry the sentinel.
+    fn secret_bearing_report(input: DiscrepancyInput) -> Discrepancy {
+        Discrepancy {
+            input,
+            new_value: Ok(Value::List(vec![
+                Value::Symbol("tool".to_string()),
+                Value::String(SENTINEL.to_string()),
+                Value::Integer(1),
+            ])),
+            lexpr_value: Ok(lexpr::Value::list(vec![
+                lexpr::Value::symbol("tool"),
+                lexpr::Value::string(SENTINEL),
+                lexpr::Value::Number(2i64.into()),
+            ])),
+            path: StructuralPath(vec![PathElement::ListIndex(2), PathElement::Atom]),
+        }
+    }
+
+    #[test]
+    fn hashed_mode_report_omits_tree_contents() {
+        covers!([SpecItem::McpToolsParserDiscrepancyReporting]);
+
+        let report = secret_bearing_report(DiscrepancyInput::Hashed { sha256: [0xab; 32] });
+        let out = format_report(&report, false);
+
+        assert!(!out.contains(SENTINEL), "hashed mode leaked payload: {out}");
+        assert_eq!(
+            out,
+            format!(
+                "[mcp-tools differential] new=List lexpr=Cons path=2.atom\n  input-sha256={}\n",
+                "ab".repeat(32)
+            )
+        );
+    }
+
+    #[test]
+    fn verbose_mode_report_includes_tree_contents_and_source() {
+        covers!([SpecItem::McpToolsParserDiscrepancyReporting]);
+
+        let source = format!("(tool \"{SENTINEL}\" 1)");
+        let report = secret_bearing_report(DiscrepancyInput::Verbose {
+            source: source.clone(),
+        });
+        let out = format_report(&report, true);
+
+        assert!(out.starts_with("[mcp-tools differential] new=Ok("));
+        assert!(out.contains(&format!("String(\"{SENTINEL}\")")));
+        assert!(out.contains("path=2.atom\n"));
+        assert!(out.ends_with(&format!("  input={source}\n")));
+    }
+
+    #[test]
+    fn hashed_mode_report_uses_error_kind_not_message() {
+        covers!([SpecItem::McpToolsParserDiscrepancyReporting]);
+
+        let message = format!("integer literal `{SENTINEL}` out of range");
+        let report = Discrepancy {
+            input: DiscrepancyInput::Hashed { sha256: [0u8; 32] },
+            new_value: Err(ParseErrorRepr {
+                kind: "IntegerOutOfRange".to_string(),
+                message: message.clone(),
+            }),
+            lexpr_value: Err(format!("lexpr choked on {SENTINEL}")),
+            path: StructuralPath(vec![PathElement::Atom]),
+        };
+
+        let hashed = format_report(&report, false);
+        assert!(hashed.contains("new=Err(IntegerOutOfRange) lexpr=Err path=atom"));
+        assert!(!hashed.contains(SENTINEL), "hashed mode leaked an error message: {hashed}");
+
+        let verbose = format_report(&report, true);
+        assert!(verbose.contains(&format!("new=Err(IntegerOutOfRange: {message})")));
+        assert!(verbose.contains(&format!("lexpr=Err(lexpr choked on {SENTINEL})")));
+    }
+
+    // -----------------------------------------------------------------------
+    // Stderr report budget (mcp-tools/parser/stderr-report-budget)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn budget_decision_partitions_counts() {
+        covers!([SpecItem::McpToolsParserStderrReportBudget]);
+
+        let decisions: Vec<BudgetDecision> = (0..70)
+            .map(|count_before| budget_decision(count_before, 64))
+            .collect();
+        let tally = |d: BudgetDecision| decisions.iter().filter(|&&x| x == d).count();
+
+        assert_eq!(tally(BudgetDecision::Emit), 64);
+        assert_eq!(tally(BudgetDecision::EmitExhausted), 1);
+        assert_eq!(tally(BudgetDecision::Drop), 5);
+        // Ordered: all Emits, then the single EmitExhausted, then Drops.
+        assert_eq!(decisions[63], BudgetDecision::Emit);
+        assert_eq!(decisions[64], BudgetDecision::EmitExhausted);
+        assert_eq!(decisions[65], BudgetDecision::Drop);
+        assert_eq!(STDERR_REPORT_BUDGET, 64);
+        assert!(budget_exhausted_line().contains("report budget (64) exhausted"));
+    }
+
+    #[test]
+    fn switching_mode_does_not_reset_budget_counter() {
+        covers!([SpecItem::McpToolsParserStderrReportBudget]);
+        let _guard = global_state_lock();
+
+        // Drive the sink past exhaustion (writes go to the test harness's
+        // captured stderr). The counter is process-global, so start from
+        // wherever it is.
+        let report = secret_bearing_report(DiscrepancyInput::Hashed { sha256: [7u8; 32] });
+        while budget_decision(stderr_reports_requested(), STDERR_REPORT_BUDGET)
+            != BudgetDecision::Drop
+        {
+            write_stderr(&report, false);
+        }
+        let exhausted_at = stderr_reports_requested();
+
+        let (_recorded, cb) = make_callback();
+        set_differential_mode(DifferentialMode::On {
+            sink: cb,
+            verbose: false,
+        });
+        set_differential_mode(DifferentialMode::On {
+            sink: DiscrepancySink::Stderr,
+            verbose: false,
+        });
+        set_differential_mode(DifferentialMode::Off);
+
+        assert_eq!(stderr_reports_requested(), exhausted_at);
+        assert_eq!(
+            budget_decision(stderr_reports_requested(), STDERR_REPORT_BUDGET),
+            BudgetDecision::Drop
+        );
+    }
+
+    #[test]
+    fn dedup_runs_before_budget() {
+        covers!([SpecItem::McpToolsParserStderrReportBudget]);
+        let _guard = global_state_lock();
+
+        set_differential_mode(DifferentialMode::On {
+            sink: DiscrepancySink::Stderr,
+            verbose: false,
+        });
+        flush_discrepancy_dedup();
+        // The 63 inputs below share one class; only input-hash dedup is under test.
+        set_discrepancy_class_dedup_capacity(0);
+
+        // 63 fresh diverging inputs (bignums: new errors, lexpr accepts).
+        let fresh: Vec<String> = (0..63).map(|i| format!("3689348814741910323{i}")).collect();
+        let before = stderr_reports_requested();
+        for input in &fresh {
+            let outcome = crate::parser::reader::parse_value(input);
+            record_discrepancy_if_diverging(input, &outcome).unwrap();
+        }
+        assert_eq!(stderr_reports_requested(), before + 63);
+
+        // A duplicate is deduplicated and must not consume report 64.
+        let outcome = crate::parser::reader::parse_value(&fresh[0]);
+        record_discrepancy_if_diverging(&fresh[0], &outcome).unwrap();
+        assert_eq!(stderr_reports_requested(), before + 63);
+
+        set_discrepancy_class_dedup_capacity(DEFAULT_CLASS_DEDUP_CAPACITY);
+        set_differential_mode(DifferentialMode::Off);
+        flush_discrepancy_dedup();
     }
 
     #[test]
@@ -648,7 +1151,7 @@ mod tests {
             lexpr_value: Ok(lexpr::Value::Number(2i64.into())),
             path: StructuralPath(vec![PathElement::Atom]),
         };
-        dispatch(&sink, &report).unwrap();
+        dispatch(&sink, false, &report).unwrap();
         let captured = recorded.lock().unwrap();
         assert_eq!(captured.len(), 1);
     }
@@ -664,7 +1167,7 @@ mod tests {
             lexpr_value: Ok(lexpr::Value::Null),
             path: StructuralPath(vec![PathElement::Atom]),
         };
-        match dispatch(&sink, &report) {
+        match dispatch(&sink, false, &report) {
             Err(DiscrepancyDispatchError::SinkPanicked) => {}
             Ok(()) => panic!("expected SinkPanicked"),
         }
@@ -672,6 +1175,7 @@ mod tests {
 
     #[test]
     fn parse_env_mode_recognizes_values() {
+        let _guard = global_state_lock();
         covers!([SpecItem::McpToolsParserDifferentialMode]);
 
         // We can't easily mutate process env in tests without races, so test the
