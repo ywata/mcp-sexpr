@@ -169,8 +169,12 @@ The 0.3 expected classes:
 |---|---|---|
 | `Value::Keyword(k)` | `lexpr::Value::Symbol(s)` where `s == format!(":{k}")` | equal |
 | `Value::Keyword(k)` | `lexpr::Value::Keyword(k)` | equal (already) |
+| `Value::Nil` | `lexpr::Value::Symbol("nil")` | equal |
+| `Value::List(items)` | improper cons chain whose final cdr is `Symbol("nil")` | compared element-wise as a proper list (tail accepted like `Null`) |
 
-Nothing else is in the table. In particular the two directions are **not** symmetric: new-parser `Symbol(":k")` vs lexpr `Keyword("k")` remains a reported discrepancy at `atom`, because it would mean the new parser failed to canonicalise a keyword — exactly the class of bug the mode exists to catch.
+The two `nil` rows exist because `grammar.md` reserves the bare token `nil` (`nil := "nil" | "()"`, both `Value::Nil`) while lexpr's reader has no such rule and yields `Symbol("nil")`. In atom position that is the first row. In tail position — `(a . nil)`, which the grammar reads as `(a . ())` = `(a)` — the new parser produces a proper `List` while lexpr produces an improper cons ending in `Symbol("nil")`; the second row lets `compare_list` accept that tail exactly as it accepts `Null`. Both matches are byte-exact, as in the grammar: `NIL` is an ordinary symbol to both parsers and never diverges. (`()` needs no row — lexpr reads it as `Null`, which the comparison already treats as equal to `Nil`.) An improper chain ending in any *other* symbol is still a structural discrepancy, reported at `atom` as before.
+
+Nothing else is in the table. In particular the two directions are **not** symmetric: new-parser `Symbol(":k")` vs lexpr `Keyword("k")` remains a reported discrepancy at `atom`, because it would mean the new parser failed to canonicalise a keyword — exactly the class of bug the mode exists to catch. Likewise new-parser `Symbol("nil")` vs lexpr `Nil` or `Null` remains reported at `atom`: it would mean the new parser failed to apply its own grammar.
 
 ### Test obligations
 
@@ -178,6 +182,10 @@ Nothing else is in the table. In particular the two directions are **not** symme
 - `(:a . :b)` dotted keywords produce no discrepancy.
 - A keyword nested three lists deep produces no discrepancy.
 - The reverse pair (new `Symbol(":k")`, lexpr `Keyword("k")`), constructed directly on the `compare_values` API, **is** reported at `atom`.
+- `(a nil)`, `(a (b (c nil)))`, `(nil . nil)`, `(a . nil)`, and `(a b . nil)` produce no discrepancy.
+- The reverse pairs (new `Symbol("nil")`, lexpr `Nil`) and (new `Symbol("nil")`, lexpr `Null`), constructed directly on `compare_values`, **are** reported at `atom`.
+- A `List` against an improper chain ending in `Symbol("other")`, constructed directly on `compare_values`, **is** still reported at `atom`.
+- The rule is byte-exact: `is_expected_class(Nil, Symbol("NIL"))` is false. `(a NIL)` produces no discrepancy for a different reason — `NIL` is an ordinary symbol to both parsers — so the byte-exactness obligation is on the rule function, not on a parse.
 
 ## Discrepancy Deduplication
 <!-- spec-id: mcp-tools/parser/discrepancy-deduplication -->
@@ -288,6 +296,7 @@ Expected discrepancy categories during 0.3:
 Suppressed by rule (never reported — see **Expected Discrepancy Classes**):
 
 - **Keyword normalization**: the new parser canonicalizes keywords to `Keyword("foo")`; lexpr reads the same token as `Symbol(":foo")`. The pair is an expected class and is treated as equal by the comparison.
+- **`nil` token**: the grammar reserves `nil` as `Value::Nil`; lexpr reads it as `Symbol("nil")`. Expected class, treated as equal (byte-exact — `NIL` is a symbol to both).
 
 Categories that should produce zero reports:
 

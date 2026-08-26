@@ -264,6 +264,48 @@ fn dotted_keywords_are_an_expected_class() {
 }
 
 #[test]
+fn nil_token_is_an_expected_class_not_a_discrepancy() {
+    covers!([SpecItem::McpToolsParserExpectedDiscrepancyClasses]);
+    let _guard = test_lock();
+
+    let recorded = install_callback();
+    for input in ["(a nil)", "(a (b (c nil)))", "(nil . nil)", "(a . nil)", "(a b . nil)"] {
+        let result = parse_value(input);
+        assert!(result.is_ok(), "{input}");
+        assert!(
+            recorded.lock().unwrap().is_empty(),
+            "{input}: Nil vs lexpr Symbol(\"nil\") must be suppressed as an expected class"
+        );
+    }
+
+    set_differential_mode(DifferentialMode::Off);
+    flush_discrepancy_dedup();
+}
+
+#[test]
+fn uppercase_nil_is_an_ordinary_symbol_to_both_parsers() {
+    covers!([SpecItem::McpToolsParserExpectedDiscrepancyClasses]);
+    let _guard = test_lock();
+
+    // Byte-exactness of the rule is asserted on `is_expected_class` directly in
+    // the unit tests; through a parse, `NIL` is a plain symbol on both sides and
+    // so never reaches the rule at all.
+    let recorded = install_callback();
+    let result = parse_value("(a NIL)");
+    assert_eq!(
+        result.unwrap(),
+        mcp_tools::Value::List(vec![
+            mcp_tools::Value::Symbol("a".to_string()),
+            mcp_tools::Value::Symbol("NIL".to_string()),
+        ])
+    );
+    assert!(recorded.lock().unwrap().is_empty());
+
+    set_differential_mode(DifferentialMode::Off);
+    flush_discrepancy_dedup();
+}
+
+#[test]
 fn deeply_nested_keyword_is_an_expected_class() {
     covers!([SpecItem::McpToolsParserExpectedDiscrepancyClasses]);
     let _guard = test_lock();
@@ -322,25 +364,6 @@ fn class_dedup_collapses_distinct_inputs_of_one_class() {
 }
 
 #[test]
-fn class_dedup_distinguishes_divergence_position() {
-    covers!([SpecItem::McpToolsParserDiscrepancyClassDeduplication]);
-    let _guard = test_lock();
-
-    let recorded = install_callback_with_class_capacity(256);
-    // `nil` is Nil for the new parser and Symbol("nil") for lexpr: a both-Ok
-    // divergence whose path is the list position.
-    let _ = parse_value("(a nil)"); // 1.atom
-    let _ = parse_value("(a b nil)"); // 2.atom
-
-    let captured = recorded.lock().unwrap();
-    let paths: Vec<String> = captured.iter().map(|d| d.path.to_string()).collect();
-    assert_eq!(paths, vec!["1.atom".to_string(), "2.atom".to_string()]);
-    drop(captured);
-
-    restore_defaults();
-}
-
-#[test]
 fn class_dedup_does_not_double_count_repeated_input() {
     covers!([SpecItem::McpToolsParserDiscrepancyClassDeduplication]);
     let _guard = test_lock();
@@ -371,34 +394,11 @@ fn class_dedup_capacity_zero_disables_class_dedup() {
     restore_defaults();
 }
 
-#[test]
-fn class_dedup_evicts_least_recently_seen_class() {
-    covers!([SpecItem::McpToolsParserDiscrepancyClassDeduplication]);
-    let _guard = test_lock();
-
-    let recorded = install_callback_with_class_capacity(2);
-    // Three classes in rotation, each time with a fresh input so the input
-    // cache never intervenes: A = 1.atom, B = 2.atom, C = bignum (Err/Ok).
-    let _ = parse_value("(a nil)"); // A: reported (1)
-    let _ = parse_value("(a b nil)"); // B: reported (2)
-    let _ = parse_value(&bignum(0)); // C: reported (3); A evicted
-    let _ = parse_value("(x nil)"); // A again: reported (4); B evicted
-    let _ = parse_value("(x y nil)"); // B again: reported (5)
-    let _ = parse_value("(z nil)"); // A: still cached -> suppressed
-
-    let captured = recorded.lock().unwrap();
-    let paths: Vec<String> = captured.iter().map(|d| d.path.to_string()).collect();
-    assert_eq!(
-        paths,
-        vec!["1.atom", "2.atom", ".", "1.atom", "2.atom"]
-            .into_iter()
-            .map(String::from)
-            .collect::<Vec<_>>()
-    );
-    drop(captured);
-
-    restore_defaults();
-}
+// `class_dedup_distinguishes_divergence_position` and
+// `class_dedup_evicts_least_recently_seen_class` live in the unit-test module of
+// src/parser/differential.rs: they need a both-Ok divergence at a list position,
+// which no parseable input produces once `nil` is an expected class, so they
+// drive the `record_discrepancy` seam with explicit paths.
 
 // ---------------------------------------------------------------------------
 // Stderr report budget (mcp-tools/parser/stderr-report-budget)

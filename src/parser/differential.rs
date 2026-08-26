@@ -370,35 +370,25 @@ pub fn record_discrepancy_if_diverging(
     new: &Result<Value, ParseError>,
 ) -> Result<(), DiscrepancyDispatchError> {
     let mode = current_differential_mode();
-    let DifferentialMode::On { sink, verbose } = mode else {
+    let DifferentialMode::On { verbose, .. } = mode else {
         return Ok(());
     };
 
     let lexpr_outcome: Result<lexpr::Value, String> =
         lexpr::from_str(input).map_err(|e| e.to_string());
 
-    let path = compare(new, &lexpr_outcome);
-
-    let path = match path {
-        Some(p) => p,
-        None => return Ok(()),
-    };
-
-    let hash = sha256_bytes(input.as_bytes());
-    let input_seen = match state().dedup.lock() {
-        Ok(mut guard) => guard.record(hash),
-        Err(_) => false,
-    };
-    if input_seen {
+    let Some(path) = compare(new, &lexpr_outcome) else {
         return Ok(());
-    }
+    };
 
     let input_repr = if verbose {
         DiscrepancyInput::Verbose {
             source: input.to_string(),
         }
     } else {
-        DiscrepancyInput::Hashed { sha256: hash }
+        DiscrepancyInput::Hashed {
+            sha256: sha256_bytes(input.as_bytes()),
+        }
     };
 
     let new_value = match new {
@@ -406,12 +396,37 @@ pub fn record_discrepancy_if_diverging(
         Err(e) => Err(ParseErrorRepr::from(e)),
     };
 
-    let report = Discrepancy {
+    record_discrepancy(Discrepancy {
         input: input_repr,
         new_value,
         lexpr_value: lexpr_outcome,
         path,
+    })
+}
+
+/// Post-comparison pipeline for an already-built report: input-hash dedup,
+/// then class dedup, then dispatch to the current mode's sink (the stderr
+/// budget lives inside the `Stderr` sink). Returns without dispatching when
+/// the mode is `Off`.
+///
+/// This is the seam tests use to exercise the dedup caches with explicit
+/// paths and kinds, independent of what the two parsers happen to disagree on.
+pub(crate) fn record_discrepancy(report: Discrepancy) -> Result<(), DiscrepancyDispatchError> {
+    let DifferentialMode::On { sink, verbose } = current_differential_mode() else {
+        return Ok(());
     };
+
+    let hash = match &report.input {
+        DiscrepancyInput::Hashed { sha256 } => *sha256,
+        DiscrepancyInput::Verbose { source } => sha256_bytes(source.as_bytes()),
+    };
+    let input_seen = match state().dedup.lock() {
+        Ok(mut guard) => guard.record(hash),
+        Err(_) => false,
+    };
+    if input_seen {
+        return Ok(());
+    }
 
     let class_seen = match state().class_dedup.lock() {
         Ok(mut guard) => guard.record(DiscrepancyClass::of(&report)),
@@ -704,6 +719,24 @@ fn is_expected_class(new: &Value, lexpr_v: &lexpr::Value) -> bool {
         (Value::Keyword(k), lexpr::Value::Symbol(s)) => s
             .strip_prefix(':')
             .is_some_and(|rest| rest == k.as_str()),
+        // The grammar reserves the bare token `nil` as `Value::Nil`; lexpr reads
+        // it as a symbol. Byte-exact: `NIL` is a symbol to both parsers.
+        (Value::Nil, lexpr::Value::Symbol(s)) => &**s == "nil",
+        _ => false,
+    }
+}
+
+/// True for a lexpr cons chain (at least one cell) whose final cdr is the
+/// symbol `nil` — the improper shape lexpr produces for a dotted `nil` tail.
+fn is_nil_terminated_chain(v: &lexpr::Value) -> bool {
+    match v {
+        lexpr::Value::Cons(cons) => {
+            let mut cur = cons.cdr();
+            while let lexpr::Value::Cons(next) = cur {
+                cur = next.cdr();
+            }
+            matches!(cur, lexpr::Value::Symbol(s) if &**s == "nil")
+        }
         _ => false,
     }
 }
@@ -726,6 +759,9 @@ fn compare_values(
         (Value::Keyword(a), lexpr::Value::Keyword(b)) if a.as_str() == b.as_ref() => None,
         (n, l) if is_expected_class(n, l) => None,
         (Value::List(items), v) if v.is_list() => compare_list(items, v, path),
+        // Expected class (tail form): `(a . nil)` is the proper list `(a)` to the
+        // new parser; lexpr leaves an improper chain ending in Symbol("nil").
+        (Value::List(items), v) if is_nil_terminated_chain(v) => compare_list(items, v, path),
         (Value::Pair(pair), lexpr::Value::Cons(cons)) => {
             path.push(PathElement::PairCar);
             if let Some(p) = compare_values(&pair.0, cons.car(), path) {
@@ -765,6 +801,8 @@ fn compare_list(
     }
     match current {
         lexpr::Value::Null | lexpr::Value::Nil => None,
+        // Expected class (tail form): a dotted `nil` tail is `()` to the new parser.
+        lexpr::Value::Symbol(s) if &*s == "nil" => None,
         _ => Some(structural_path_with(path, PathElement::ListIndex(items.len()))),
     }
 }
@@ -907,6 +945,53 @@ mod tests {
         let old = lexpr::Value::symbol(":k");
         assert!(is_expected_class(&new, &old));
         assert!(compare_values(&new, &old, &mut Vec::new()).is_none());
+    }
+
+    #[test]
+    fn nil_vs_lexpr_nil_symbol_is_expected_class() {
+        covers!([SpecItem::McpToolsParserExpectedDiscrepancyClasses]);
+
+        let new = Value::Nil;
+        let old = lexpr::Value::symbol("nil");
+        assert!(is_expected_class(&new, &old));
+        assert!(compare_values(&new, &old, &mut Vec::new()).is_none());
+
+        // Byte-exact: `NIL` is an ordinary symbol to both parsers.
+        assert!(!is_expected_class(&Value::Nil, &lexpr::Value::symbol("NIL")));
+        assert!(!is_expected_class(&Value::Nil, &lexpr::Value::symbol("nil ")));
+    }
+
+    #[test]
+    fn nil_tail_is_expected_class_but_other_symbol_tail_is_not() {
+        covers!([SpecItem::McpToolsParserExpectedDiscrepancyClasses]);
+
+        let new = Value::List(vec![Value::Symbol("a".to_string())]);
+        let nil_tail = lexpr::Value::cons(lexpr::Value::symbol("a"), lexpr::Value::symbol("nil"));
+        assert!(is_nil_terminated_chain(&nil_tail));
+        assert!(compare_values(&new, &nil_tail, &mut Vec::new()).is_none());
+
+        let other_tail =
+            lexpr::Value::cons(lexpr::Value::symbol("a"), lexpr::Value::symbol("other"));
+        assert!(!is_nil_terminated_chain(&other_tail));
+        assert_eq!(
+            compare_values(&new, &other_tail, &mut Vec::new()),
+            Some(StructuralPath(vec![PathElement::Atom]))
+        );
+    }
+
+    #[test]
+    fn nil_expected_class_is_not_symmetric() {
+        covers!([SpecItem::McpToolsParserExpectedDiscrepancyClasses]);
+
+        // The new parser failing to apply its own grammar must still be reported.
+        let new = Value::Symbol("nil".to_string());
+        for old in [lexpr::Value::Nil, lexpr::Value::Null] {
+            assert!(!is_expected_class(&new, &old));
+            assert_eq!(
+                compare_values(&new, &old, &mut Vec::new()),
+                Some(StructuralPath(vec![PathElement::Atom]))
+            );
+        }
     }
 
     #[test]
@@ -1093,6 +1178,105 @@ mod tests {
         set_discrepancy_class_dedup_capacity(DEFAULT_CLASS_DEDUP_CAPACITY);
         set_differential_mode(DifferentialMode::Off);
         flush_discrepancy_dedup();
+    }
+
+    // -----------------------------------------------------------------------
+    // Class-keyed deduplication, position-sensitive cases
+    // (mcp-tools/parser/discrepancy-class-deduplication). Driven through the
+    // `record_discrepancy` seam: both sides Ok, explicit path, distinct hash.
+    // -----------------------------------------------------------------------
+
+    /// A both-Ok list/cons discrepancy at list index `index`, with a unique
+    /// input hash derived from `seq` so the input cache never intervenes.
+    fn ok_ok_report_at(index: usize, seq: u8) -> Discrepancy {
+        Discrepancy {
+            input: DiscrepancyInput::Hashed { sha256: [seq; 32] },
+            new_value: Ok(Value::List(vec![Value::Symbol("a".to_string()), Value::Nil])),
+            lexpr_value: Ok(lexpr::Value::list(vec![
+                lexpr::Value::symbol("a"),
+                lexpr::Value::symbol("nil"),
+            ])),
+            path: StructuralPath(vec![PathElement::ListIndex(index), PathElement::Atom]),
+        }
+    }
+
+    /// An Err/Ok discrepancy at the root (the bignum shape), unique hash from `seq`.
+    fn err_ok_report(seq: u8) -> Discrepancy {
+        Discrepancy {
+            input: DiscrepancyInput::Hashed { sha256: [seq; 32] },
+            new_value: Err(ParseErrorRepr {
+                kind: "IntegerOutOfRange".to_string(),
+                message: "out of range".to_string(),
+            }),
+            lexpr_value: Ok(lexpr::Value::Number(1i64.into())),
+            path: StructuralPath(Vec::new()),
+        }
+    }
+
+    fn install_callback_with_class_capacity(
+        class_capacity: usize,
+    ) -> Arc<Mutex<Vec<Discrepancy>>> {
+        let (recorded, sink) = make_callback();
+        set_differential_mode(DifferentialMode::On {
+            sink,
+            verbose: false,
+        });
+        set_discrepancy_dedup_capacity(1024);
+        set_discrepancy_class_dedup_capacity(class_capacity);
+        flush_discrepancy_dedup();
+        recorded
+    }
+
+    fn restore_defaults() {
+        set_discrepancy_class_dedup_capacity(DEFAULT_CLASS_DEDUP_CAPACITY);
+        set_differential_mode(DifferentialMode::Off);
+        flush_discrepancy_dedup();
+    }
+
+    #[test]
+    fn class_dedup_distinguishes_divergence_position() {
+        covers!([SpecItem::McpToolsParserDiscrepancyClassDeduplication]);
+        let _guard = global_state_lock();
+
+        let recorded = install_callback_with_class_capacity(256);
+        record_discrepancy(ok_ok_report_at(1, 1)).unwrap(); // 1.atom
+        record_discrepancy(ok_ok_report_at(2, 2)).unwrap(); // 2.atom
+
+        let captured = recorded.lock().unwrap();
+        let paths: Vec<String> = captured.iter().map(|d| d.path.to_string()).collect();
+        assert_eq!(paths, vec!["1.atom".to_string(), "2.atom".to_string()]);
+        drop(captured);
+
+        restore_defaults();
+    }
+
+    #[test]
+    fn class_dedup_evicts_least_recently_seen_class() {
+        covers!([SpecItem::McpToolsParserDiscrepancyClassDeduplication]);
+        let _guard = global_state_lock();
+
+        let recorded = install_callback_with_class_capacity(2);
+        // Three classes in rotation, each time with a fresh input hash so the
+        // input cache never intervenes: A = 1.atom, B = 2.atom, C = Err/Ok at root.
+        record_discrepancy(ok_ok_report_at(1, 10)).unwrap(); // A: reported (1)
+        record_discrepancy(ok_ok_report_at(2, 11)).unwrap(); // B: reported (2)
+        record_discrepancy(err_ok_report(12)).unwrap(); // C: reported (3); A evicted
+        record_discrepancy(ok_ok_report_at(1, 13)).unwrap(); // A again: reported (4); B evicted
+        record_discrepancy(ok_ok_report_at(2, 14)).unwrap(); // B again: reported (5)
+        record_discrepancy(ok_ok_report_at(1, 15)).unwrap(); // A: still cached -> suppressed
+
+        let captured = recorded.lock().unwrap();
+        let paths: Vec<String> = captured.iter().map(|d| d.path.to_string()).collect();
+        assert_eq!(
+            paths,
+            vec!["1.atom", "2.atom", ".", "1.atom", "2.atom"]
+                .into_iter()
+                .map(String::from)
+                .collect::<Vec<_>>()
+        );
+        drop(captured);
+
+        restore_defaults();
     }
 
     #[test]
