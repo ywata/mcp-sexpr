@@ -3,7 +3,7 @@
 - **Date**: 2026-08-26
 - **In reply to**: `docs/2026-08-26-differential-parse-stderr.md` (deep-rev / `mcp-iter`)
 - **Change of record**: `specs/changes/2026-08-26-differential-report-hazards.md`
-- **Rev to pin**: `<REV-PLACEHOLDER — fill in after commit>` (crate version `0.3.0`)
+- **Rev to pin**: the merge commit of https://github.com/ywata/mcp-sexpr/pull/3 once merged (implementation commit `dab838a` on `feature/differential-report-hazards` until then); crate version `0.3.0`
 
 Thanks for the report — every claim reproduced against `f09e3f9`, and the misfiled-hang story is
 exactly the failure mode we'd rather find in a report than in production. All four items are
