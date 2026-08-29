@@ -133,3 +133,81 @@ fn pair_only_for_dotted_form() {
     assert!(v.is_pair());
     assert!(!v.is_list());
 }
+
+#[test]
+fn keyword_canonicalization_is_position_independent() {
+    covers!([SpecItem::McpToolsParserKeywordCanonicalization]);
+
+    // Standalone, key position, value position, nested sub-form, and bare list
+    // element all yield Value::Keyword — no position demotes a keyword token to a
+    // symbol or a string.
+    assert_eq!(parse_value(":solo").unwrap(), Value::Keyword("solo".into()));
+
+    let v = parse_value("(record :verdict :pass :inner (sub :k :v) :tail)").unwrap();
+    let items = v.as_list().expect("list");
+    assert_eq!(items[0], Value::Symbol("record".into()));
+    assert_eq!(items[1], Value::Keyword("verdict".into())); // key position
+    assert_eq!(items[2], Value::Keyword("pass".into())); // value position
+    assert_eq!(items[3], Value::Keyword("inner".into()));
+
+    let inner = items[4].as_list().expect("nested list");
+    assert_eq!(inner[1], Value::Keyword("k".into()));
+    assert_eq!(inner[2], Value::Keyword("v".into())); // nested value position
+
+    assert_eq!(items[5], Value::Keyword("tail".into())); // bare list element
+
+    // The dotted-pair tail is a value position too.
+    let p = parse_value("(:a . :b)").unwrap();
+    let (car, cdr) = p.as_pair().expect("pair");
+    assert_eq!(*car, Value::Keyword("a".into()));
+    assert_eq!(*cdr, Value::Keyword("b".into()));
+}
+
+#[test]
+fn keyword_charset_stays_loose() {
+    covers!([SpecItem::McpToolsParserKeywordCanonicalization]);
+
+    // The parser deliberately does not enforce a narrow identifier rule; consumers
+    // that want [a-z][a-z0-9-]* enforce it in their own readers.
+    for (src, name) in [
+        (":Foo", "Foo"),
+        (":k_x", "k_x"),
+        (":kebab-case", "kebab-case"),
+        (":with.dot", "with.dot"),
+        (":n42", "n42"),
+        (":*star*", "*star*"),
+    ] {
+        assert_eq!(
+            parse_value(src).unwrap(),
+            Value::Keyword(name.into()),
+            "charset regression for {}",
+            src
+        );
+    }
+}
+
+#[test]
+fn keyword_display_reattaches_colon_and_round_trips() {
+    covers!([SpecItem::McpToolsParserKeywordCanonicalization]);
+
+    assert_eq!(format!("{}", Value::Keyword("foo".into())), ":foo");
+
+    // Round-trip property for keyword-bearing forms, including a keyword in value
+    // position: rendering must not shift key/value alignment on re-parse.
+    for src in [
+        ":solo",
+        "(record :verdict :pass)",
+        "(t :a 1 :b (sub :k :v) :c :d)",
+        "(:Foo :k_x)",
+    ] {
+        let v = parse_value(src).unwrap();
+        let rendered = format!("{}", v);
+        assert_eq!(
+            parse_value(&rendered).unwrap(),
+            v,
+            "round-trip diverged for {} (rendered {})",
+            src,
+            rendered
+        );
+    }
+}
