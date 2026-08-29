@@ -89,6 +89,56 @@ These are surfaced as errors rather than silently truncated — silent truncatio
 
 The crate does **not** re-export `lexpr::Value` as `mcp_tools::lexpr::Value`. Consumers that need lexpr during the migration window declare it in their own `Cargo.toml` (typically `lexpr = "0.2"`). Rationale: forwarding a third-party crate's API makes the public surface fragile against `lexpr` version bumps, and consumers are migrating away anyway. Decision recorded as `q-reexport` in the change spec decisions log.
 
+## Keyword Argument Extraction
+<!-- spec-id: mcp-tools/parser/kw-value-extraction -->
+
+`get_kw_value(&Value, &str) -> Result<Option<Value>>` looks up a keyword argument in a
+tool-call form and returns the raw `Value` occupying its value slot.
+
+```rust
+pub fn get_kw_value(root: &Value, key: &str) -> Result<Option<Value>>;
+```
+
+The form is read as a head followed by keyword/value pairs:
+
+```
+(head :k1 v1 :k2 v2 ...)
+```
+
+Scanning rules:
+
+- `root` must be a `Value::List`. Any other variant — including `Pair` — is an error
+  (`expected list (tool call form)`).
+- Index 0 is the head and is skipped unconditionally; it is never treated as a keyword.
+- From index 1 the scan alternates key slot / value slot. A key slot must hold
+  `Value::Keyword`; the first key slot holding anything else ends the scan and yields
+  `Ok(None)`.
+- **The value slot is consumed positionally, whatever its type.** After a key slot is
+  matched, the immediately following item is taken as that key's value with no type
+  inspection. A keyword-valued argument such as `(record :verdict :pass)` therefore
+  yields `verdict -> Keyword("pass")`; the `:pass` in value position is never
+  re-interpreted as the next key. Scanning resumes at the item after the value slot,
+  so later keys in the same form still resolve. The same holds for a bare word in
+  value position: `(record :verdict pass)` yields `verdict -> Symbol("pass")`, and
+  `Symbol` is returned as-is rather than being coerced to a string.
+- A key slot with no following item is an error
+  (`expected value after keyword :<name>`); the form is malformed, not simply missing
+  the requested key.
+- A well-formed scan that never matches `key` yields `Ok(None)`.
+
+The returned `Value` is cloned; `root` is left untouched.
+
+This positional rule is contractual: consumers such as `mcp-compose` encode enumerated
+values as keywords (`:pass` / `:fail`, agent levels, record keys) and rely on a
+keyword in value position parsing as a value rather than shifting the key/value
+alignment for the rest of the form. The bare-word spelling is relied on for the same
+enumerations — a `symbol`-typed field reported as `(record :verdict pass)` — so
+`Keyword` and `Symbol` in value position are both load-bearing and neither is
+normalized into the other.
+
+`get_kw_str` and `require_kw_str` are thin wrappers over `get_kw_value` and inherit
+these scanning rules; they add only the string type-check on the extracted value.
+
 ## API Deprecation
 <!-- spec-id: mcp-tools/parser/api-deprecation -->
 

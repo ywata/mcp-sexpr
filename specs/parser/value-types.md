@@ -106,6 +106,18 @@ assert_eq!(kw.as_keyword(), Some("foo"));   // not ":foo"
 
 This eliminates the dual-form behavior `lexpr` exhibits, where some code paths produce `Keyword("foo")` and others produce `Symbol(":foo")`. The `normalize_kw` helper present in earlier `mcp-tools` releases is removed in 0.3.
 
+Canonicalization is **position-independent**: `:foo` lexes to a keyword token at the
+lexer, so it reaches consumers as `Value::Keyword` wherever it appears — standalone,
+in key position, in value position (`(record :verdict :pass)`), nested inside a
+sub-form, or as a bare list element. No position re-interprets a keyword token as a
+symbol or a string.
+
+The accepted keyword charset is deliberately loose: after the leading colon,
+`lex_keyword` accepts the full symbol-continuation set, so `:Foo` and `:k_x` are valid
+keywords. Consumers that need a narrower identifier rule (for example
+`[a-z][a-z0-9-]*`) enforce it in their own readers; the parser does not tighten the
+charset on their behalf.
+
 When formatting a `Keyword` back to source via `Display` or `quote_str`, the leading colon is reattached. Round-trip property: `parse_value(format!("{}", v)) == Ok(v.clone())` for every `Value` reachable from parsing source.
 
 ## List Representation
