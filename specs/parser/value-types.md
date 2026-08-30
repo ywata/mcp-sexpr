@@ -74,6 +74,12 @@ pub enum SpannedNode {
 
 `SpannedNode` mirrors `Value` shape exactly except that `List` and `Pair` recurse into `Spanned` rather than `Value`. This means every node in a parsed tree carries a span and its adjacent comments — diagnostics can quote any sub-expression with full source coordinates.
 
+That sentence is about shape. The atom variants also **discriminate identically on both paths**: for any source text, the `SpannedNode` variant at a given position and the `Value` variant that `parse_value` yields at the same position are the same variant carrying the same payload. `parse_value_with_positions` and `parse_value` differ only in whether spans and comments are retained; neither collapses, promotes, nor reinterprets an atom the other does not.
+
+The mirror is **position-independent**. `:k` yields `SpannedNode::Keyword("k")` and a bare word yields `SpannedNode::Symbol("w")` wherever they appear — standalone, in key position, in value position, in head position, nested in a sub-form, as a bare list element, or in a dotted tail. This is the spanned-path restatement of `mcp-tools/parser/keyword-canonicalization`, which is written in terms of `Value`.
+
+`into_value` **preserves the variant**. `Spanned::into_value` and `to_value` map `SpannedNode::Keyword(s) -> Value::Keyword(s)` and `SpannedNode::Symbol(s) -> Value::Symbol(s)`. Neither is coerced to `String`, and neither is normalized into the other. Consumers that match on `SpannedNode` variants directly — reading a form as a surface language rather than as data — depend on all three properties.
+
 `Spanned::into_value(self) -> Value` strips spans and comments, producing the lightweight representation. The reverse direction does not exist — synthesizing positions for a programmatically built tree is meaningless. Code paths that need spans must obtain them by parsing source text.
 
 `Spanned` is `Clone` and `Debug`. It is not `PartialEq` against `Value` directly; consumers comparing structurally call `into_value()` first.
@@ -111,6 +117,10 @@ lexer, so it reaches consumers as `Value::Keyword` wherever it appears — stand
 in key position, in value position (`(record :verdict :pass)`), nested inside a
 sub-form, or as a bare list element. No position re-interprets a keyword token as a
 symbol or a string.
+
+The same holds on the spanned path: `parse_value_with_positions` yields
+`SpannedNode::Keyword` in exactly the same positions, and `into_value` preserves the
+variant. See § Spanned Type (`mcp-tools/parser/spanned-type`).
 
 The accepted keyword charset is deliberately loose: after the leading colon,
 `lex_keyword` accepts the full symbol-continuation set, so `:Foo` and `:k_x` are valid
