@@ -211,3 +211,173 @@ fn keyword_display_reattaches_colon_and_round_trips() {
         );
     }
 }
+
+/// Helper: the items of a SpannedNode::List, for terse assertions.
+fn items_of(n: &SpannedNode) -> &[Spanned] {
+    match n {
+        SpannedNode::List(items) => items,
+        other => panic!("expected List, got {:?}", other),
+    }
+}
+
+/// Helper: the SpannedNode variant name at a position, for terse assertions.
+fn node_kind(n: &SpannedNode) -> &'static str {
+    match n {
+        SpannedNode::Nil => "Nil",
+        SpannedNode::Bool(_) => "Bool",
+        SpannedNode::Integer(_) => "Integer",
+        SpannedNode::Float(_) => "Float",
+        SpannedNode::String(_) => "String",
+        SpannedNode::Symbol(_) => "Symbol",
+        SpannedNode::Keyword(_) => "Keyword",
+        SpannedNode::List(_) => "List",
+        SpannedNode::Pair(_) => "Pair",
+    }
+}
+
+#[test]
+fn spanned_keyword_and_symbol_variants_are_position_independent() {
+    covers!([SpecItem::McpToolsParserSpannedType]);
+
+    // Consumers that read a form as a surface language match on SpannedNode
+    // variants directly, so the variant must discriminate in every position --
+    // not only in key position, which is all the Value-path tests reach.
+    let s = parse_value_with_positions("(record :verdict :pass :note \"ok\")").unwrap();
+    let items = items_of(&s.value);
+    assert_eq!(node_kind(&items[0].value), "Symbol"); // head
+    assert_eq!(node_kind(&items[1].value), "Keyword"); // key position
+    assert_eq!(node_kind(&items[2].value), "Keyword"); // value position
+    assert_eq!(node_kind(&items[3].value), "Keyword");
+    assert_eq!(node_kind(&items[4].value), "String");
+    match (&items[1].value, &items[2].value) {
+        (SpannedNode::Keyword(k), SpannedNode::Keyword(v)) => {
+            assert_eq!(k, "verdict");
+            assert_eq!(v, "pass");
+        }
+        other => panic!("expected Keyword/Keyword, got {:?}", other),
+    }
+
+    // A bare word in value position stays a Symbol.
+    let s = parse_value_with_positions("(record :verdict pass)").unwrap();
+    let items = items_of(&s.value);
+    assert_eq!(node_kind(&items[2].value), "Symbol");
+    match &items[2].value {
+        SpannedNode::Symbol(w) => assert_eq!(w, "pass"),
+        other => panic!("expected Symbol, got {:?}", other),
+    }
+
+    // Nested sub-form: head is a Symbol, both inner atoms are Keywords.
+    let s = parse_value_with_positions("(outer (sub :k :v))").unwrap();
+    let items = items_of(&s.value);
+    let inner = items_of(&items[1].value);
+    assert_eq!(node_kind(&inner[0].value), "Symbol");
+    assert_eq!(node_kind(&inner[1].value), "Keyword");
+    assert_eq!(node_kind(&inner[2].value), "Keyword");
+
+    // Standalone, at top level.
+    assert_eq!(
+        node_kind(&parse_value_with_positions(":solo").unwrap().value),
+        "Keyword"
+    );
+    assert_eq!(
+        node_kind(&parse_value_with_positions("word").unwrap().value),
+        "Symbol"
+    );
+
+    // Dotted tail is a value position too.
+    let s = parse_value_with_positions("(:a . :b)").unwrap();
+    match &s.value {
+        SpannedNode::Pair(p) => {
+            assert_eq!(node_kind(&p.0.value), "Keyword");
+            assert_eq!(node_kind(&p.1.value), "Keyword");
+        }
+        other => panic!("expected Pair, got {:?}", other),
+    }
+}
+
+#[test]
+fn into_value_preserves_keyword_and_symbol_variants() {
+    covers!([SpecItem::McpToolsParserSpannedType]);
+
+    // into_value strips spans, not type information: a keyword must arrive as
+    // Value::Keyword and a bare word as Value::Symbol, neither coerced to String
+    // nor normalized into the other.
+    let v = parse_value_with_positions("(record :verdict :pass :note \"ok\")")
+        .unwrap()
+        .into_value();
+    let items = v.as_list().expect("list");
+    assert_eq!(items[0], Value::Symbol("record".into()));
+    assert_eq!(items[1], Value::Keyword("verdict".into()));
+    assert_eq!(items[2], Value::Keyword("pass".into())); // value position
+    assert_eq!(items[4], Value::String("ok".into()));
+
+    let v = parse_value_with_positions("(record :verdict pass)")
+        .unwrap()
+        .into_value();
+    let items = v.as_list().expect("list");
+    assert_eq!(items[2], Value::Symbol("pass".into()));
+
+    let v = parse_value_with_positions("(outer (sub :k :v))")
+        .unwrap()
+        .into_value();
+    let inner = v.as_list().expect("outer")[1].as_list().expect("inner");
+    assert_eq!(inner[0], Value::Symbol("sub".into()));
+    assert_eq!(inner[1], Value::Keyword("k".into()));
+    assert_eq!(inner[2], Value::Keyword("v".into()));
+
+    assert_eq!(
+        parse_value_with_positions(":solo").unwrap().into_value(),
+        Value::Keyword("solo".into())
+    );
+    assert_eq!(
+        parse_value_with_positions("word").unwrap().into_value(),
+        Value::Symbol("word".into())
+    );
+
+    let v = parse_value_with_positions("(:a . :b)").unwrap().into_value();
+    let (car, cdr) = v.as_pair().expect("pair");
+    assert_eq!(*car, Value::Keyword("a".into()));
+    assert_eq!(*cdr, Value::Keyword("b".into()));
+}
+
+#[test]
+fn to_value_preserves_keyword_and_symbol_variants() {
+    covers!([SpecItem::McpToolsParserSpannedType]);
+
+    // to_value is into_value's borrowing twin and has its own match arms; before
+    // this test both of its Keyword/Symbol arms could be replaced with String
+    // without reddening a single test in the suite.
+    let s = parse_value_with_positions("(record :verdict :pass :note \"ok\")").unwrap();
+    let v = s.to_value();
+    let items = v.as_list().expect("list");
+    assert_eq!(items[0], Value::Symbol("record".into()));
+    assert_eq!(items[1], Value::Keyword("verdict".into()));
+    assert_eq!(items[2], Value::Keyword("pass".into())); // value position
+    assert_eq!(items[4], Value::String("ok".into()));
+
+    // The borrow is non-consuming: the Spanned is still usable afterwards, and a
+    // second to_value agrees with into_value on the same tree.
+    assert_eq!(s.to_value(), v);
+    assert_eq!(s.into_value(), v);
+
+    let s = parse_value_with_positions("(outer (sub :k pass))").unwrap();
+    let v = s.to_value();
+    let inner = v.as_list().expect("outer")[1].as_list().expect("inner");
+    assert_eq!(inner[0], Value::Symbol("sub".into()));
+    assert_eq!(inner[1], Value::Keyword("k".into()));
+    assert_eq!(inner[2], Value::Symbol("pass".into()));
+
+    assert_eq!(
+        parse_value_with_positions(":solo").unwrap().to_value(),
+        Value::Keyword("solo".into())
+    );
+    assert_eq!(
+        parse_value_with_positions("word").unwrap().to_value(),
+        Value::Symbol("word".into())
+    );
+
+    let v = parse_value_with_positions("(:a . :b)").unwrap().to_value();
+    let (car, cdr) = v.as_pair().expect("pair");
+    assert_eq!(*car, Value::Keyword("a".into()));
+    assert_eq!(*cdr, Value::Keyword("b".into()));
+}

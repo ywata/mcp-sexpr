@@ -1,0 +1,57 @@
+(plan "spanned-variant-discrimination"
+  :spec (use "specs/changes/2026-08-30-spanned-variant-discrimination.md")
+  :goals (do
+
+    (spec <- transform "spec-variant-discrimination"
+      :spec "In specs/parser/value-types.md, add the variant-discrimination paragraph to the Spanned Type section (spec-id mcp-tools/parser/spanned-type), immediately after the sentence stating that SpannedNode mirrors Value shape exactly. Three properties: (1) atom variants discriminate identically on both paths - for any source text the SpannedNode variant at a position and the Value variant parse_value yields at the same position are the same variant with the same payload, the two parsers differing only in span/comment retention; (2) the mirror is position-independent - :k yields SpannedNode::Keyword and a bare word yields SpannedNode::Symbol standalone, in key position, in value position, in head position, nested in a sub-form, as a bare list element, and in a dotted tail; (3) into_value and to_value preserve the variant, mapping Keyword to Value::Keyword and Symbol to Value::Symbol with no coercion to String and no normalization of one into the other. Also add a pointer from the Keyword Canonicalization section noting the property holds on the spanned path too. No new spec-id and no new second-level heading, so spec-files.txt is untouched and no SpecItem regeneration is required."
+      :out ((file "specs/parser/value-types.md"))
+      :preserve ("Existing spec-ids mcp-tools/parser/spanned-type and mcp-tools/parser/keyword-canonicalization keep their current ids and headings"
+                 "The position-independence and loose-charset paragraphs added in 546afa7 stay intact"
+                 "No new second-level heading and no new spec-id is introduced"
+                 "specs/parser/value-types.md is not added to or removed from spec-files.txt"))
+
+    (cycle1 <- transform "cycle-1-variant-positions"
+      :spec "Falsification cycle 1 - see the change spec section 'Method: falsification-gated TDD'. WRITE: in tests/parser_types.rs add tests under covers!([SpecItem::McpToolsParserSpannedType]) asserting SpannedNode variants directly, which no existing test does. Cover: (record :verdict :pass :note \"ok\") asserting SpannedNode::Keyword at both the key index and the value index plus SpannedNode::String at the string value; (record :verdict pass) asserting SpannedNode::Symbol(\"pass\") in value position; an outer form containing a nested (sub :k :v) asserting SpannedNode::Symbol at the head and SpannedNode::Keyword at both inner atoms; standalone :solo and a bare word at top level; the dotted tail (:a . :b) asserting SpannedNode::Pair with Keyword on both sides. FALSIFY with gate m-lex: change src/parser/reader.rs:339 from SpannedNode::Keyword(s) to SpannedNode::Symbol(s), run the new tests, and require them to FAIL. Record the observed failure message in the goal result. A test that stays green under m-lex is not pinning the property and must be strengthened before this goal completes. REVERT the mutation and require green again. The mutation is never committed - git diff --exit-code src/ must be clean when this goal finishes."
+      :in ((from spec))
+      :out ((file "tests/parser_types.rs"))
+      :preserve ("Gate m-lex is reverted before the goal completes and git diff --exit-code src/ is clean"
+                 "spanned_node_recurses_into_spanned_for_lists is not deleted or weakened - its recursion property is independent of variant discrimination"
+                 "The keyword canonicalization tests added in 546afa7 stay intact"
+                 "Every new test carries a covers!() macro"
+                 "cargo test passes with the mutation reverted"))
+
+    (cycle2 <- transform "cycle-2-into-value-preservation"
+      :spec "Falsification cycle 2. WRITE: in tests/parser_types.rs assert that Spanned::into_value preserves the variant - for each form used in cycle 1, assert the resulting Value variant matches the SpannedNode variant it came from (Keyword to Value::Keyword, Symbol to Value::Symbol), rather than only asserting the tree is a list. Same covers!([SpecItem::McpToolsParserSpannedType]). FALSIFY with two gates applied and reverted one at a time: m-into-kw changes src/parser/types.rs:305 from Value::Keyword(s) to Value::String(s); m-into-sym changes src/parser/types.rs:304 from Value::Symbol(s) to Value::String(s). BOTH gates must redden this cycle's tests. If a gate reddens only cycle 1's tests and not these, the preservation assertions are riding on the parse assertions and must be separated before this goal completes. Record both observed failures. REVERT each mutation and require green."
+      :in ((from cycle1))
+      :out ((file "tests/parser_types.rs"))
+      :preserve ("Gates m-into-kw and m-into-sym are reverted before the goal completes and git diff --exit-code src/ is clean"
+                 "The cycle 1 tests stay intact"
+                 "spanned_into_value_strips_spans_and_comments is not deleted or weakened"
+                 "Every new test carries a covers!() macro"
+                 "cargo test passes with the mutations reverted"))
+
+    (cycle3 <- transform "cycle-3-to-value-preservation"
+      :spec "Falsification cycle 3. FALSIFY FIRST: apply gate m-to-value, changing both arms at src/parser/types.rs:324-325 (the borrowing to_value twin) to Value::String(...), and run the whole suite BEFORE writing anything. If nothing reddens, the to_value arms are entirely unpinned - record that as the finding this cycle closes. WRITE: add tests exercising to_value on a keyword- and symbol-bearing form, asserting the same preservation property as cycle 2. Same covers!([SpecItem::McpToolsParserSpannedType]). Re-run under m-to-value and require the new tests to FAIL, then REVERT and require green."
+      :in ((from cycle2))
+      :out ((file "tests/parser_types.rs"))
+      :preserve ("Gate m-to-value is reverted before the goal completes and git diff --exit-code src/ is clean"
+                 "The cycle 1 and cycle 2 tests stay intact"
+                 "The pre-write falsification result is recorded whether or not anything reddened"
+                 "Every new test carries a covers!() macro"
+                 "cargo test passes with the mutation reverted"))
+
+    (cycle4 <- transform "cycle-4-equivalence-inputs"
+      :spec "Falsification cycle 4, whose gate is expected to come back GREEN - that is the point of the cycle, not a failure. WRITE: in tests/parser_api.rs extend the input list of parse_value_with_positions_into_value_matches_parse_value with (:k :v), (:k v) and (head :k :v), so the existing equivalence check reaches keyword and symbol values in value position and a keyword in head position. Keep the existing covers!([SpecItem::McpToolsParserParseValue, SpecItem::McpToolsParserParseValueWithPositions]). FALSIFY with gate m-lex: it mutates a site both parsers share, so this test may stay green under it. Record the observed result either way. If it stays green, that is the demonstration that equivalence alone cannot catch a symmetric regression - which is why cycles 1 to 3 exist. Do NOT strengthen this test to make the gate redden; the direct variant assertions are where that pin belongs. REVERT the mutation."
+      :in ((from cycle3))
+      :out ((file "tests/parser_api.rs"))
+      :preserve ("Gate m-lex is reverted before the goal completes and git diff --exit-code src/ is clean"
+                 "The existing input list entries are kept - inputs are added, none removed"
+                 "The get_kw_value contract tests added in 546afa7 stay intact"
+                 "The test keeps both spec-ids in its covers!() macro"
+                 "The test is not restructured to force a red gate"
+                 "cargo test passes with the mutation reverted"))
+
+    (check "verify-suite-and-coverage"
+      :spec "Run git diff --exit-code src/ and confirm no mutation from any cycle survived - this is the first check, before anything else. Run cargo test and confirm the full suite is green with no test deleted or disabled. Run bin/check_coverage.sh and confirm mcp-tools/parser/spanned-type and mcp-tools/parser/parse-value-with-positions are still reported as covered. Expect the coverage percentage NOT to move: spanned-type was already covered by spanned_node_recurses_into_spanned_for_lists, which is exactly why the coverage script could not have detected this gap - record that observation rather than treating a flat number as a failure. Finally, collect the four recorded gate results (m-lex red in cycle 1, m-into-kw and m-into-sym red in cycle 2, m-to-value red in cycle 3, m-lex green-or-red in cycle 4) into the verification summary; a cycle with no recorded gate result is incomplete regardless of suite colour. The 8 uncovered mcp-tools/pretty/* specs are an unrelated artifact of a local bin/check_coverage.sh edit dropping --features format-pretty and are out of scope."
+      :in ((from cycle4))
+      :out ((doc "spanned-variant-discrimination-verified")))))

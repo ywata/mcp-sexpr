@@ -45,6 +45,9 @@ fn parse_value_with_positions_into_value_matches_parse_value() {
         "(a b c)",
         "(1 . 2)",
         "(:k \"v\")",
+        "(:k :v)",
+        "(:k v)",
+        "(head :k :v)",
         "'expr",
     ];
     for input in inputs {
