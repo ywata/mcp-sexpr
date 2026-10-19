@@ -49,6 +49,9 @@
 #![deny(missing_docs)]
 
 // Generated traceability enum. Always available.
+// Skipped by rustfmt: build.rs regenerates it on every re-run, so formatting
+// it would be undone by the next build and break `cargo fmt --check`.
+#[rustfmt::skip]
 mod traceability_gen;
 pub use traceability_gen::SpecItem;
 
