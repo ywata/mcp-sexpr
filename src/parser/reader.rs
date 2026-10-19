@@ -107,7 +107,11 @@ impl fmt::Display for ParseError {
         match self {
             ParseError::SourceTooLarge => f.write_str("source larger than 4 GiB is not supported"),
             ParseError::UnexpectedChar { ch, position } => {
-                write!(f, "unexpected character {:?} at {}:{}", ch, position.line, position.column)
+                write!(
+                    f,
+                    "unexpected character {:?} at {}:{}",
+                    ch, position.line, position.column
+                )
             }
             ParseError::UnterminatedString { position } => write!(
                 f,
@@ -134,16 +138,12 @@ impl fmt::Display for ParseError {
                 "invalid numeric literal at {}:{}",
                 position.line, position.column
             ),
-            ParseError::UnmatchedRParen { position } => write!(
-                f,
-                "unmatched ')' at {}:{}",
-                position.line, position.column
-            ),
-            ParseError::UnclosedList { position } => write!(
-                f,
-                "unclosed '(' from {}:{}",
-                position.line, position.column
-            ),
+            ParseError::UnmatchedRParen { position } => {
+                write!(f, "unmatched ')' at {}:{}", position.line, position.column)
+            }
+            ParseError::UnclosedList { position } => {
+                write!(f, "unclosed '(' from {}:{}", position.line, position.column)
+            }
             ParseError::DotWithoutHead { position } => write!(
                 f,
                 "dot without preceding value at {}:{}",
@@ -165,11 +165,9 @@ impl fmt::Display for ParseError {
                 position.line, position.column
             ),
             ParseError::UnexpectedEof => f.write_str("unexpected end of input"),
-            ParseError::TrailingInput { position } => write!(
-                f,
-                "trailing input at {}:{}",
-                position.line, position.column
-            ),
+            ParseError::TrailingInput { position } => {
+                write!(f, "trailing input at {}:{}", position.line, position.column)
+            }
         }
     }
 }
@@ -192,9 +190,7 @@ impl From<LexError> for ParseError {
             LexError::InvalidEscape { sequence, position } => {
                 ParseError::InvalidEscape { sequence, position }
             }
-            LexError::IntegerOutOfRange { position } => {
-                ParseError::IntegerOutOfRange { position }
-            }
+            LexError::IntegerOutOfRange { position } => ParseError::IntegerOutOfRange { position },
             LexError::InvalidNumber { position } => ParseError::InvalidNumber { position },
         }
     }
@@ -371,8 +367,7 @@ impl Reader {
                     let span = Span::new(lparen_span.start, close.span.end);
                     if !self.pending_leading.is_empty() {
                         if let Some(last) = items.last_mut() {
-                            last.trailing_comments
-                                .extend(self.pending_leading.drain(..));
+                            last.trailing_comments.append(&mut self.pending_leading);
                         } else {
                             self.pending_leading.clear();
                         }
@@ -511,26 +506,33 @@ mod tests {
 
     #[test]
     fn parses_atoms_and_lists() {
-        covers!([SpecItem::McpToolsParserGrammar, SpecItem::McpToolsParserParseValue]);
+        covers!([
+            SpecItem::McpToolsParserGrammar,
+            SpecItem::McpToolsParserParseValue
+        ]);
 
         assert_eq!(parse_value("()").unwrap(), Value::Nil);
         assert_eq!(parse_value("nil").unwrap(), Value::Nil);
         assert_eq!(parse_value("#t").unwrap(), Value::Bool(true));
         assert_eq!(parse_value("42").unwrap(), Value::Integer(42));
         assert_eq!(parse_value("1.5").unwrap(), Value::Float(1.5));
-        assert_eq!(
-            parse_value("\"hi\"").unwrap(),
-            Value::String("hi".into())
-        );
+        assert_eq!(parse_value("\"hi\"").unwrap(), Value::String("hi".into()));
         assert_eq!(
             parse_value("(1 2 3)").unwrap(),
-            Value::List(vec![Value::Integer(1), Value::Integer(2), Value::Integer(3)])
+            Value::List(vec![
+                Value::Integer(1),
+                Value::Integer(2),
+                Value::Integer(3)
+            ])
         );
     }
 
     #[test]
     fn parses_dotted_pairs() {
-        covers!([SpecItem::McpToolsParserGrammar, SpecItem::McpToolsParserListRepresentation]);
+        covers!([
+            SpecItem::McpToolsParserGrammar,
+            SpecItem::McpToolsParserListRepresentation
+        ]);
 
         let v = parse_value("(a . b)").unwrap();
         assert!(v.is_pair());

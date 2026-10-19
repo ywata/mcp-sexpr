@@ -61,9 +61,8 @@ impl<'a> FormMatch<'a> {
 
     /// The value for the first `:name` keyword, or an error if absent.
     pub fn require_keyword(&self, name: &str) -> Result<&'a Value> {
-        self.keyword(name).ok_or_else(|| {
-            anyhow!("{}: missing required keyword :{}", self.head, name)
-        })
+        self.keyword(name)
+            .ok_or_else(|| anyhow!("{}: missing required keyword :{}", self.head, name))
     }
 }
 
@@ -92,9 +91,12 @@ pub fn match_form<'a>(value: &'a Value, expected_head: &str) -> Result<FormMatch
         .split_first()
         .ok_or_else(|| anyhow!("expected list form ({} ...), got ()", expected_head))?;
 
-    let head = head_value
-        .as_symbol()
-        .ok_or_else(|| anyhow!("expected symbol head in form, got {}", variant_name(head_value)))?;
+    let head = head_value.as_symbol().ok_or_else(|| {
+        anyhow!(
+            "expected symbol head in form, got {}",
+            variant_name(head_value)
+        )
+    })?;
 
     if head != expected_head {
         return Err(anyhow!(
@@ -184,7 +186,10 @@ mod tests {
 
     #[test]
     fn match_form_accepts_keyword_only() {
-        covers!([SpecItem::McpToolsMatchFormMatchForm, SpecItem::McpToolsMatchFormKeyword]);
+        covers!([
+            SpecItem::McpToolsMatchFormMatchForm,
+            SpecItem::McpToolsMatchFormKeyword
+        ]);
         let v = parse_value(r#"(config :name "x" :value 1)"#).unwrap();
         let m = match_form(&v, "config").unwrap();
         assert_eq!(m.positional().len(), 0);
@@ -194,7 +199,11 @@ mod tests {
 
     #[test]
     fn match_form_accepts_positional_then_keyword() {
-        covers!([SpecItem::McpToolsMatchFormMatchForm, SpecItem::McpToolsMatchFormPositional, SpecItem::McpToolsMatchFormKeyword]);
+        covers!([
+            SpecItem::McpToolsMatchFormMatchForm,
+            SpecItem::McpToolsMatchFormPositional,
+            SpecItem::McpToolsMatchFormKeyword
+        ]);
         let v = parse_value(r#"(define foo 42 :doc "counter" :max 100)"#).unwrap();
         let m = match_form(&v, "define").unwrap();
         assert_eq!(m.positional().len(), 2);
@@ -206,7 +215,10 @@ mod tests {
 
     #[test]
     fn form_match_borrows_lifetime() {
-        covers!([SpecItem::McpToolsMatchFormFormMatchType, SpecItem::McpToolsMatchFormLifetime]);
+        covers!([
+            SpecItem::McpToolsMatchFormFormMatchType,
+            SpecItem::McpToolsMatchFormLifetime
+        ]);
         let v = parse_value("(f 1)").unwrap();
         let m = match_form(&v, "f").unwrap();
         // Returned reference outlives `m` and is bounded by `v`.

@@ -7,9 +7,9 @@ mod common;
 
 #[allow(deprecated)]
 use mcp_tools::{
-    current_differential_mode, get_kw_str_lexpr, get_kw_value_lexpr, iter_list_lexpr, parse_str_list_lexpr,
-    parse_text_ref_lexpr, parse_value, parse_value_lexpr, require_kw_str_lexpr, set_differential_mode,
-    DifferentialMode, DiscrepancySink, TextRef, Value,
+    current_differential_mode, get_kw_str_lexpr, get_kw_value_lexpr, iter_list_lexpr,
+    parse_str_list_lexpr, parse_text_ref_lexpr, parse_value, parse_value_lexpr,
+    require_kw_str_lexpr, set_differential_mode, DifferentialMode, DiscrepancySink, TextRef, Value,
 };
 
 use common::{covers, SpecItem};
@@ -82,10 +82,10 @@ fn phase_3_removal_targets_are_the_lexpr_suffixed_symbols() {
     // can audit the surface against this list. Keeping the symbols compilable
     // here guarantees the spec and the code agree on the deletion target.
     let _ = parse_value_lexpr;
-    let _ = get_kw_value_lexpr::<>;
-    let _ = get_kw_str_lexpr::<>;
-    let _ = require_kw_str_lexpr::<>;
-    let _ = iter_list_lexpr::<>;
-    let _ = parse_str_list_lexpr::<>;
-    let _ = parse_text_ref_lexpr::<>;
+    let _ = get_kw_value_lexpr;
+    let _ = get_kw_str_lexpr;
+    let _ = require_kw_str_lexpr;
+    let _ = iter_list_lexpr;
+    let _ = parse_str_list_lexpr;
+    let _ = parse_text_ref_lexpr;
 }

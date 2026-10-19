@@ -79,7 +79,10 @@ mod tests {
     fn cons_produces_pair() {
         covers!([SpecItem::McpToolsBuildCons]);
         let v = cons(integer(1), integer(2));
-        assert_eq!(v, Value::Pair(Box::new((Value::Integer(1), Value::Integer(2)))));
+        assert_eq!(
+            v,
+            Value::Pair(Box::new((Value::Integer(1), Value::Integer(2))))
+        );
         assert!(v.is_pair());
         assert!(v.as_list().is_none());
     }
@@ -109,7 +112,11 @@ mod tests {
 
     #[test]
     fn list_round_trip_with_parse() {
-        covers!([SpecItem::McpToolsBuildList, SpecItem::McpToolsBuildSymbol, SpecItem::McpToolsBuildInteger]);
+        covers!([
+            SpecItem::McpToolsBuildList,
+            SpecItem::McpToolsBuildSymbol,
+            SpecItem::McpToolsBuildInteger
+        ]);
         let built = list(vec![symbol("define"), symbol("x"), integer(42)]);
         let parsed = parse_value("(define x 42)").unwrap();
         assert_eq!(built, parsed);

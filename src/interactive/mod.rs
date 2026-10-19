@@ -25,4 +25,7 @@
 /// Line loop implementation with rustyline.
 pub mod line_loop;
 
-pub use line_loop::{default_history_path, run_line_loop, run_line_loop_async, HistoryKind, LineLoopConfig, LoopControl};
+pub use line_loop::{
+    default_history_path, run_line_loop, run_line_loop_async, HistoryKind, LineLoopConfig,
+    LoopControl,
+};

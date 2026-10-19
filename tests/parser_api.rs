@@ -74,13 +74,19 @@ fn parse_errors_round_trip_through_anyhow_chain() {
     let cases: &[(&str, fn(&ParseError) -> bool)] = &[
         ("(", |e| matches!(e, ParseError::UnclosedList { .. })),
         (")", |e| matches!(e, ParseError::UnmatchedRParen { .. })),
-        ("\"unterminated", |e| matches!(e, ParseError::UnterminatedString { .. })),
-        ("#| unclosed", |e| matches!(e, ParseError::UnterminatedBlockComment { .. })),
+        ("\"unterminated", |e| {
+            matches!(e, ParseError::UnterminatedString { .. })
+        }),
+        ("#| unclosed", |e| {
+            matches!(e, ParseError::UnterminatedBlockComment { .. })
+        }),
         (r#""\x""#, |e| matches!(e, ParseError::InvalidEscape { .. })),
         ("1 2", |e| matches!(e, ParseError::TrailingInput { .. })),
         ("(. x)", |e| matches!(e, ParseError::DotWithoutHead { .. })),
         ("(x .)", |e| matches!(e, ParseError::DotWithoutTail { .. })),
-        ("(x . y z)", |e| matches!(e, ParseError::DotWithMultipleTail { .. })),
+        ("(x . y z)", |e| {
+            matches!(e, ParseError::DotWithMultipleTail { .. })
+        }),
         ("'", |e| matches!(e, ParseError::QuoteWithoutValue { .. })),
         ("", |e| matches!(e, ParseError::UnexpectedEof)),
     ];
@@ -166,7 +172,10 @@ fn get_kw_value_consumes_the_value_slot_positionally() {
             Value::Keyword("w".into()),
         ]))
     );
-    assert_eq!(get_kw_value(&v, "e").unwrap(), Some(Value::Keyword("z".into())));
+    assert_eq!(
+        get_kw_value(&v, "e").unwrap(),
+        Some(Value::Keyword("z".into()))
+    );
 }
 
 #[test]

@@ -40,7 +40,11 @@ impl Router {
     /// Route a tool call to its handler.
     pub fn route(&self, tool_name: &str, sexpr: &str) -> Result<String> {
         // Resolve alias if present
-        let canonical_name = self.aliases.get(tool_name).map(|s| s.as_str()).unwrap_or(tool_name);
+        let canonical_name = self
+            .aliases
+            .get(tool_name)
+            .map(|s| s.as_str())
+            .unwrap_or(tool_name);
 
         // Find and call handler
         let handler = self
@@ -58,7 +62,11 @@ impl Router {
 
     /// Check if a tool is registered.
     pub fn has_tool(&self, tool_name: &str) -> bool {
-        let canonical_name = self.aliases.get(tool_name).map(|s| s.as_str()).unwrap_or(tool_name);
+        let canonical_name = self
+            .aliases
+            .get(tool_name)
+            .map(|s| s.as_str())
+            .unwrap_or(tool_name);
         self.handlers.contains_key(canonical_name)
     }
 }

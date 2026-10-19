@@ -225,7 +225,10 @@ impl Span {
 
     /// Zero-width span at `pos`.
     pub const fn empty_at(pos: Position) -> Self {
-        Span { start: pos, end: pos }
+        Span {
+            start: pos,
+            end: pos,
+        }
     }
 }
 

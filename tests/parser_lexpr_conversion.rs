@@ -89,8 +89,11 @@ fn lexpr_vector_to_value_errors() {
     covers!([SpecItem::McpToolsMigrationLexprConversionLossy]);
 
     let lexpr_v = lexpr::Value::Vector(
-        vec![lexpr::Value::Number(1i64.into()), lexpr::Value::Number(2i64.into())]
-            .into_boxed_slice(),
+        vec![
+            lexpr::Value::Number(1i64.into()),
+            lexpr::Value::Number(2i64.into()),
+        ]
+        .into_boxed_slice(),
     );
     match Value::try_from(lexpr_v) {
         Err(LexprConversionError::UnsupportedVector) => {}

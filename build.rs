@@ -2,8 +2,7 @@ use spec_trace::builder::Builder;
 use std::fs;
 
 fn read_spec_files() -> Vec<String> {
-    let content = fs::read_to_string("spec-files.txt")
-        .expect("Failed to read spec-files.txt");
+    let content = fs::read_to_string("spec-files.txt").expect("Failed to read spec-files.txt");
     content
         .lines()
         .map(|line| line.trim())
@@ -24,8 +23,7 @@ fn main() {
         }
     }
 
-    let mut builder = Builder::new()
-        .require_prefix("mcp-tools");
+    let mut builder = Builder::new().require_prefix("mcp-tools");
     for doc in &docs {
         builder = builder.add_doc(doc);
     }

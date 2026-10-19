@@ -15,17 +15,18 @@
 //! - [`lexpr_compat`] — Bidirectional `Value` ↔ `lexpr::Value` conversion.
 //! - [`differential`] — Runtime comparison wrapper against `lexpr::from_str`.
 
-pub mod types;
-pub mod lexer;
-pub mod reader;
-pub mod lexpr_compat;
 pub mod differential;
+pub mod lexer;
+pub mod lexpr_compat;
+pub mod reader;
+pub mod types;
 
-pub use types::{Comment, CommentKind, Position, Span, Spanned, SpannedNode, Value};
-pub use reader::{parse_value, parse_value_with_positions, ParseError};
-pub use lexpr_compat::LexprConversionError;
 pub use differential::{
     current_differential_mode, flush_discrepancy_dedup, set_differential_mode,
-    set_discrepancy_class_dedup_capacity, set_discrepancy_dedup_capacity, DifferentialMode, Discrepancy, DiscrepancyInput, STDERR_REPORT_BUDGET,
-    DiscrepancySink, PathElement, StructuralPath,
+    set_discrepancy_class_dedup_capacity, set_discrepancy_dedup_capacity, DifferentialMode,
+    Discrepancy, DiscrepancyInput, DiscrepancySink, PathElement, StructuralPath,
+    STDERR_REPORT_BUDGET,
 };
+pub use lexpr_compat::LexprConversionError;
+pub use reader::{parse_value, parse_value_with_positions, ParseError};
+pub use types::{Comment, CommentKind, Position, Span, Spanned, SpannedNode, Value};

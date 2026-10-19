@@ -716,9 +716,9 @@ fn compare(
 /// See `specs/parser/differential-mode.md` § Expected Discrepancy Classes.
 fn is_expected_class(new: &Value, lexpr_v: &lexpr::Value) -> bool {
     match (new, lexpr_v) {
-        (Value::Keyword(k), lexpr::Value::Symbol(s)) => s
-            .strip_prefix(':')
-            .is_some_and(|rest| rest == k.as_str()),
+        (Value::Keyword(k), lexpr::Value::Symbol(s)) => {
+            s.strip_prefix(':').is_some_and(|rest| rest == k.as_str())
+        }
         // The grammar reserves the bare token `nil` as `Value::Nil`; lexpr reads
         // it as a symbol. Byte-exact: `NIL` is a symbol to both parsers.
         (Value::Nil, lexpr::Value::Symbol(s)) => &**s == "nil",
@@ -751,7 +751,9 @@ fn compare_values(
         (Value::Nil, lexpr::Value::Null) => None,
         (Value::Bool(a), lexpr::Value::Bool(b)) if a == b => None,
         (Value::Integer(a), lexpr::Value::Number(n)) if n.as_i64() == Some(*a) => None,
-        (Value::Float(a), lexpr::Value::Number(n)) if n.as_f64().map(f64::to_bits) == Some(a.to_bits()) => {
+        (Value::Float(a), lexpr::Value::Number(n))
+            if n.as_f64().map(f64::to_bits) == Some(a.to_bits()) =>
+        {
             None
         }
         (Value::String(a), lexpr::Value::String(b)) if a.as_str() == b.as_ref() => None,
@@ -803,7 +805,10 @@ fn compare_list(
         lexpr::Value::Null | lexpr::Value::Nil => None,
         // Expected class (tail form): a dotted `nil` tail is `()` to the new parser.
         lexpr::Value::Symbol(s) if &*s == "nil" => None,
-        _ => Some(structural_path_with(path, PathElement::ListIndex(items.len()))),
+        _ => Some(structural_path_with(
+            path,
+            PathElement::ListIndex(items.len()),
+        )),
     }
 }
 
@@ -841,7 +846,7 @@ fn sha256_bytes(input: &[u8]) -> [u8; 32] {
     }
     padded.extend_from_slice(&bit_len.to_be_bytes());
 
-    for chunk in padded.chunks_exact(64) {
+    for chunk in padded.as_chunks::<64>().0 {
         let mut w = [0u32; 64];
         for i in 0..16 {
             w[i] = u32::from_be_bytes([
@@ -957,8 +962,14 @@ mod tests {
         assert!(compare_values(&new, &old, &mut Vec::new()).is_none());
 
         // Byte-exact: `NIL` is an ordinary symbol to both parsers.
-        assert!(!is_expected_class(&Value::Nil, &lexpr::Value::symbol("NIL")));
-        assert!(!is_expected_class(&Value::Nil, &lexpr::Value::symbol("nil ")));
+        assert!(!is_expected_class(
+            &Value::Nil,
+            &lexpr::Value::symbol("NIL")
+        ));
+        assert!(!is_expected_class(
+            &Value::Nil,
+            &lexpr::Value::symbol("nil ")
+        ));
     }
 
     #[test]
@@ -1083,7 +1094,10 @@ mod tests {
 
         let hashed = format_report(&report, false);
         assert!(hashed.contains("new=Err(IntegerOutOfRange) lexpr=Err path=atom"));
-        assert!(!hashed.contains(SENTINEL), "hashed mode leaked an error message: {hashed}");
+        assert!(
+            !hashed.contains(SENTINEL),
+            "hashed mode leaked an error message: {hashed}"
+        );
 
         let verbose = format_report(&report, true);
         assert!(verbose.contains(&format!("new=Err(IntegerOutOfRange: {message})")));
@@ -1191,7 +1205,10 @@ mod tests {
     fn ok_ok_report_at(index: usize, seq: u8) -> Discrepancy {
         Discrepancy {
             input: DiscrepancyInput::Hashed { sha256: [seq; 32] },
-            new_value: Ok(Value::List(vec![Value::Symbol("a".to_string()), Value::Nil])),
+            new_value: Ok(Value::List(vec![
+                Value::Symbol("a".to_string()),
+                Value::Nil,
+            ])),
             lexpr_value: Ok(lexpr::Value::list(vec![
                 lexpr::Value::symbol("a"),
                 lexpr::Value::symbol("nil"),
@@ -1213,9 +1230,7 @@ mod tests {
         }
     }
 
-    fn install_callback_with_class_capacity(
-        class_capacity: usize,
-    ) -> Arc<Mutex<Vec<Discrepancy>>> {
+    fn install_callback_with_class_capacity(class_capacity: usize) -> Arc<Mutex<Vec<Discrepancy>>> {
         let (recorded, sink) = make_callback();
         set_differential_mode(DifferentialMode::On {
             sink,

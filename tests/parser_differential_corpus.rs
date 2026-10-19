@@ -116,8 +116,8 @@ fn corpus_files_round_trip_through_format_and_reparse() {
         let content = fs::read_to_string(&file).unwrap();
         let label = file.file_name().unwrap().to_string_lossy().into_owned();
 
-        let v = parse_value(&content)
-            .unwrap_or_else(|e| panic!("{}: new parser failed: {}", label, e));
+        let v =
+            parse_value(&content).unwrap_or_else(|e| panic!("{}: new parser failed: {}", label, e));
 
         let formatted = format!("{}", v);
         let reparsed = parse_value(&formatted)

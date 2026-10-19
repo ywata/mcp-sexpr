@@ -90,8 +90,7 @@ impl Config {
         key: &str,
     ) -> ConfigResult<Option<T>> {
         if let Some(value) = self.extra.get(key) {
-            let result = T::deserialize(value.clone())
-                .map_err(|e| ConfigError::TomlError(e))?;
+            let result = T::deserialize(value.clone()).map_err(ConfigError::TomlError)?;
             Ok(Some(result))
         } else {
             Ok(None)
@@ -110,11 +109,7 @@ mod tests {
         let mut file = NamedTempFile::new().unwrap();
         writeln!(file, "[initialize]").unwrap();
         writeln!(file, "prompt_doc = \"spec.md\"").unwrap();
-        writeln!(
-            file,
-            "prompt_sections = [\"# Overview\", \"## Usage\"]"
-        )
-        .unwrap();
+        writeln!(file, "prompt_sections = [\"# Overview\", \"## Usage\"]").unwrap();
         writeln!(file, "").unwrap();
         writeln!(file, "[tools.my-tool]").unwrap();
         writeln!(file, "prompt_doc = \"api-spec.md\"").unwrap();
@@ -164,12 +159,12 @@ mod tests {
         file.flush().unwrap();
 
         let config = Config::from_file(file.path()).unwrap();
-        
+
         #[derive(Deserialize)]
         struct MyAppConfig {
             max_retries: u32,
         }
-        
+
         let custom: Option<MyAppConfig> = config.get_custom_config("my_app").unwrap();
         assert!(custom.is_some());
         assert_eq!(custom.unwrap().max_retries, 3);
