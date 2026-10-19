@@ -1,5 +1,6 @@
-use spec_trace::builder::Builder;
+use spec_trace::builder::{Builder, BuilderError};
 use std::fs;
+use std::io::ErrorKind;
 
 fn read_spec_files() -> Vec<String> {
     let content = fs::read_to_string("spec-files.txt")
@@ -29,8 +30,34 @@ fn main() {
     for doc in &docs {
         builder = builder.add_doc(doc);
     }
-    builder
-        .output("src/traceability_gen.rs")
-        .generate()
-        .expect("Failed to generate traceability code");
+    if let Err(err) = builder.output(OUTPUT).generate() {
+        panic!("{}", generate_failure_message(&err));
+    }
+}
+
+/// Generated file, relative to the crate root (`CARGO_MANIFEST_DIR`).
+const OUTPUT: &str = "src/traceability_gen.rs";
+
+/// Explain a generator failure. A denied I/O is reported as an environment
+/// problem naming the absolute output path, because it otherwise surfaces
+/// attached to whichever dependency change forced this build script to re-run.
+fn generate_failure_message(err: &BuilderError) -> String {
+    let output = std::env::var("CARGO_MANIFEST_DIR")
+        .map(|dir| format!("{}/{}", dir, OUTPUT))
+        .unwrap_or_else(|_| OUTPUT.to_string());
+    match err {
+        BuilderError::Io(io) if io.kind() == ErrorKind::PermissionDenied => format!(
+            "mcp-tools build script could not write the generated traceability file \
+             (or read a spec file listed in spec-files.txt): {io}\n\
+             output path: {output}\n\
+             This is an environment problem, not a code problem: the build script \
+             regenerates {OUTPUT} inside the crate source tree, and the current \
+             environment (e.g. an agent sandbox building mcp-tools as a dependency \
+             from cargo's git checkout) denies that write. Re-run with that path \
+             writable, or unsandboxed."
+        ),
+        other => format!(
+            "Failed to generate traceability code into {output}: {other}"
+        ),
+    }
 }
