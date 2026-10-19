@@ -91,7 +91,7 @@ impl Config {
     ) -> ConfigResult<Option<T>> {
         if let Some(value) = self.extra.get(key) {
             let result = T::deserialize(value.clone())
-                .map_err(|e| ConfigError::TomlError(e))?;
+                .map_err(ConfigError::TomlError)?;
             Ok(Some(result))
         } else {
             Ok(None)

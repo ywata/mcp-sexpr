@@ -371,8 +371,7 @@ impl Reader {
                     let span = Span::new(lparen_span.start, close.span.end);
                     if !self.pending_leading.is_empty() {
                         if let Some(last) = items.last_mut() {
-                            last.trailing_comments
-                                .extend(self.pending_leading.drain(..));
+                            last.trailing_comments.append(&mut self.pending_leading);
                         } else {
                             self.pending_leading.clear();
                         }

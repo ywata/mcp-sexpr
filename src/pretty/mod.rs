@@ -238,7 +238,7 @@ fn display_width(s: &str) -> usize {
 fn split_keyword_tail(tail: &[Value]) -> Option<(usize, Vec<usize>)> {
     let kw_start = tail.iter().position(|v| v.is_keyword())?;
     let kw_part = &tail[kw_start..];
-    if kw_part.is_empty() || kw_part.len() % 2 != 0 {
+    if kw_part.is_empty() || !kw_part.len().is_multiple_of(2) {
         return None;
     }
     let mut widths = Vec::with_capacity(kw_part.len() / 2);
