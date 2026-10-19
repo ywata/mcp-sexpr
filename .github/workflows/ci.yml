@@ -8,12 +8,19 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Fetch git dependencies with the git CLI so it uses the ssh-agent below.
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # spec-trace is a private git dependency fetched over SSH; the secret
+      # holds the private half of a read-only deploy key on ywata/spec-trace.
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SPEC_TRACE_SSH_KEY }}
       - uses: dtolnay/rust-toolchain@stable
       - name: Run tests
         run: cargo test --all-features
@@ -26,6 +33,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # spec-trace is a private git dependency fetched over SSH; the secret
+      # holds the private half of a read-only deploy key on ywata/spec-trace.
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SPEC_TRACE_SSH_KEY }}
       - uses: dtolnay/rust-toolchain@stable
       - name: Build docs
         run: cargo doc --no-deps
