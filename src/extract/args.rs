@@ -230,7 +230,10 @@ mod tests {
     #[test]
     fn test_get_string() {
         let value = parse_tool_call("(tool :name \"test\")").unwrap();
-        assert_eq!(get_string(&value, "name").unwrap(), Some("test".to_string()));
+        assert_eq!(
+            get_string(&value, "name").unwrap(),
+            Some("test".to_string())
+        );
         assert_eq!(get_string(&value, "missing").unwrap(), None);
     }
 

@@ -73,7 +73,11 @@ pub fn pretty_print_default(value: &Value) -> String {
 /// Returns the empty string for an empty slice. Output never starts or ends with
 /// a newline.
 pub fn pretty_print_top_forms(values: &[Value], opts: &PrettyOpts) -> String {
-    let sep = if opts.blank_line_between_top_forms { "\n\n" } else { "\n" };
+    let sep = if opts.blank_line_between_top_forms {
+        "\n\n"
+    } else {
+        "\n"
+    };
     values
         .iter()
         .map(|v| pretty_print(v, opts))
@@ -100,12 +104,7 @@ fn write_value(out: &mut String, value: &Value, current_col: usize, opts: &Prett
     }
 }
 
-fn write_wrapped_list(
-    out: &mut String,
-    items: &[Value],
-    current_col: usize,
-    opts: &PrettyOpts,
-) {
+fn write_wrapped_list(out: &mut String, items: &[Value], current_col: usize, opts: &PrettyOpts) {
     out.push('(');
     let head = &items[0];
     let head_col = current_col + 1;
@@ -155,7 +154,9 @@ fn write_wrapped_list(
             let kw_part = &tail[kw_start..];
             let mut i = 0;
             while i + 1 < kw_part.len() {
-                let kw_name = kw_part[i].as_keyword().expect("kw_split guarantees keyword");
+                let kw_name = kw_part[i]
+                    .as_keyword()
+                    .expect("kw_split guarantees keyword");
                 let val = &kw_part[i + 1];
                 out.push('\n');
                 push_indent(out, inner_col);
@@ -261,7 +262,10 @@ mod tests {
     }
 
     fn opts(width: usize) -> PrettyOpts {
-        PrettyOpts { max_line_width: width, ..PrettyOpts::default() }
+        PrettyOpts {
+            max_line_width: width,
+            ..PrettyOpts::default()
+        }
     }
 
     #[test]
@@ -277,7 +281,10 @@ mod tests {
     #[test]
     fn options_record_update_syntax() {
         covers!([SpecItem::McpToolsPrettyOptions]);
-        let o = PrettyOpts { max_line_width: 40, ..PrettyOpts::default() };
+        let o = PrettyOpts {
+            max_line_width: 40,
+            ..PrettyOpts::default()
+        };
         assert_eq!(o.max_line_width, 40);
         assert_eq!(o.indent, 2);
     }
@@ -293,7 +300,10 @@ mod tests {
     fn pretty_print_default_uses_default_opts() {
         covers!([SpecItem::McpToolsPrettyPrettyPrint]);
         let v = parse_value("(a b)").unwrap();
-        assert_eq!(pretty_print_default(&v), pretty_print(&v, &PrettyOpts::default()));
+        assert_eq!(
+            pretty_print_default(&v),
+            pretty_print(&v, &PrettyOpts::default())
+        );
     }
 
     #[test]
@@ -403,7 +413,11 @@ mod tests {
         let v = parse_value(r#"(f :a 1 :bb 2)"#).unwrap();
         let s = pretty_print(
             &v,
-            &PrettyOpts { max_line_width: 5, align_keyword_args: false, ..PrettyOpts::default() },
+            &PrettyOpts {
+                max_line_width: 5,
+                align_keyword_args: false,
+                ..PrettyOpts::default()
+            },
         );
         // Expect each :kw value separated by one space, no padding.
         assert!(s.contains("  :a 1"));
@@ -429,7 +443,10 @@ mod tests {
         let b = parse_value("(define y 2)").unwrap();
         let s = pretty_print_top_forms(
             &[a, b],
-            &PrettyOpts { blank_line_between_top_forms: false, ..PrettyOpts::default() },
+            &PrettyOpts {
+                blank_line_between_top_forms: false,
+                ..PrettyOpts::default()
+            },
         );
         assert_eq!(s, "(define x 1)\n(define y 2)");
     }
@@ -485,8 +502,12 @@ mod tests {
             let v = parse_value(input).unwrap();
             for w in [10usize, 20, 40, 80, 200] {
                 let s = pretty_print(&v, &opts(w));
-                let r = parse_value(&s)
-                    .unwrap_or_else(|e| panic!("re-parse failed: {} for input={} width={}\noutput:\n{}", e, input, w, s));
+                let r = parse_value(&s).unwrap_or_else(|e| {
+                    panic!(
+                        "re-parse failed: {} for input={} width={}\noutput:\n{}",
+                        e, input, w, s
+                    )
+                });
                 assert_eq!(r, v, "round-trip failed for {} at width {}", input, w);
             }
         }

@@ -5,9 +5,7 @@
 mod common;
 
 use common::{covers, SpecItem};
-use mcp_tools::{
-    parse_value, parse_value_with_positions, ParseError, Spanned, SpannedNode, Value,
-};
+use mcp_tools::{parse_value, parse_value_with_positions, ParseError, Spanned, SpannedNode, Value};
 
 #[test]
 fn value_constructors_and_predicates() {
@@ -29,7 +27,13 @@ fn value_constructors_and_predicates() {
     assert_eq!(Value::String("x".into()).as_str(), Some("x"));
     assert_eq!(Value::Symbol("y".into()).as_symbol(), Some("y"));
     assert_eq!(Value::Keyword("z".into()).as_keyword(), Some("z"));
-    assert_eq!(Value::List(vec![Value::Integer(1)]).as_list().unwrap().len(), 1);
+    assert_eq!(
+        Value::List(vec![Value::Integer(1)])
+            .as_list()
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[test]
@@ -49,7 +53,9 @@ fn spanned_node_recurses_into_spanned_for_lists() {
     let s = parse_value_with_positions("(1 2)").unwrap();
     if let SpannedNode::List(items) = &s.value {
         // Each item is a full Spanned with its own span.
-        assert!(items.iter().all(|i| i.span.start.byte_offset <= i.span.end.byte_offset));
+        assert!(items
+            .iter()
+            .all(|i| i.span.start.byte_offset <= i.span.end.byte_offset));
     } else {
         panic!("expected List");
     }
@@ -334,7 +340,9 @@ fn into_value_preserves_keyword_and_symbol_variants() {
         Value::Symbol("word".into())
     );
 
-    let v = parse_value_with_positions("(:a . :b)").unwrap().into_value();
+    let v = parse_value_with_positions("(:a . :b)")
+        .unwrap()
+        .into_value();
     let (car, cdr) = v.as_pair().expect("pair");
     assert_eq!(*car, Value::Keyword("a".into()));
     assert_eq!(*cdr, Value::Keyword("b".into()));

@@ -20,4 +20,6 @@ pub mod markdown;
 
 pub use builder::{PromptBuilder, PromptError, PromptResult};
 pub use config::{Config, ConfigError, ConfigResult, InitializeConfig, ToolConfig};
-pub use markdown::{extract_section, extract_sections, load_and_extract, MarkdownError, MarkdownResult};
+pub use markdown::{
+    extract_section, extract_sections, load_and_extract, MarkdownError, MarkdownResult,
+};

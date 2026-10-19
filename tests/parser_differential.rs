@@ -269,7 +269,13 @@ fn nil_token_is_an_expected_class_not_a_discrepancy() {
     let _guard = test_lock();
 
     let recorded = install_callback();
-    for input in ["(a nil)", "(a (b (c nil)))", "(nil . nil)", "(a . nil)", "(a b . nil)"] {
+    for input in [
+        "(a nil)",
+        "(a (b (c nil)))",
+        "(nil . nil)",
+        "(a . nil)",
+        "(a b . nil)",
+    ] {
         let result = parse_value(input);
         assert!(result.is_ok(), "{input}");
         assert!(
@@ -424,7 +430,10 @@ fn stderr_sink_is_bounded_and_never_blocks_the_caller() {
 
     for i in 0..(mcp_tools::STDERR_REPORT_BUDGET + 10) {
         let outcome = parse_value(&bignum(i));
-        assert!(outcome.is_err(), "caller must still see the new parser's Err");
+        assert!(
+            outcome.is_err(),
+            "caller must still see the new parser's Err"
+        );
     }
 
     restore_defaults();

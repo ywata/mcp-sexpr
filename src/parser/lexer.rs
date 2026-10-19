@@ -536,7 +536,10 @@ mod tests {
     fn tokenize_quote_forms() {
         covers!([SpecItem::McpToolsParserGrammar]);
 
-        assert_eq!(tokens_of("'x"), vec![Token::Quote, Token::Symbol("x".into())]);
+        assert_eq!(
+            tokens_of("'x"),
+            vec![Token::Quote, Token::Symbol("x".into())]
+        );
         assert_eq!(
             tokens_of(",@x"),
             vec![Token::UnquoteSplicing, Token::Symbol("x".into())]

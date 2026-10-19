@@ -84,7 +84,7 @@ pub fn format_blocked(waiting_goals: &[String], fields: &[(&str, &str)]) -> Stri
         .iter()
         .map(|(key, value)| format!(":{} {}", key, quote_str(value)))
         .collect();
-    
+
     if field_strs.is_empty() {
         format!("(blocked :waiting-goals ({}))", goals_str)
     } else {

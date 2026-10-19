@@ -14,7 +14,10 @@ use mcp_tools::pretty::{pretty_print, pretty_print_default, pretty_print_top_for
 use mcp_tools::Value;
 
 fn opts(width: usize) -> PrettyOpts {
-    PrettyOpts { max_line_width: width, ..PrettyOpts::default() }
+    PrettyOpts {
+        max_line_width: width,
+        ..PrettyOpts::default()
+    }
 }
 
 #[test]
@@ -30,7 +33,11 @@ fn options_defaults_match_spec() {
 #[test]
 fn options_record_update() {
     covers!([SpecItem::McpToolsPrettyOptions]);
-    let o = PrettyOpts { max_line_width: 40, indent: 4, ..PrettyOpts::default() };
+    let o = PrettyOpts {
+        max_line_width: 40,
+        indent: 4,
+        ..PrettyOpts::default()
+    };
     assert_eq!(o.max_line_width, 40);
     assert_eq!(o.indent, 4);
     assert!(o.align_keyword_args); // inherited
@@ -47,7 +54,10 @@ fn options_zero_width_no_panic() {
 fn pretty_print_default_matches_default_opts() {
     covers!([SpecItem::McpToolsPrettyPrettyPrint]);
     let v = parse_value("(a b c)").unwrap();
-    assert_eq!(pretty_print_default(&v), pretty_print(&v, &PrettyOpts::default()));
+    assert_eq!(
+        pretty_print_default(&v),
+        pretty_print(&v, &PrettyOpts::default())
+    );
 }
 
 #[test]
@@ -66,7 +76,10 @@ fn layout_atom_and_short_list_emit_single_line() {
     covers!([SpecItem::McpToolsPrettyLayoutRules]);
     assert_eq!(pretty_print_default(&parse_value("42").unwrap()), "42");
     assert_eq!(pretty_print_default(&parse_value("foo").unwrap()), "foo");
-    assert_eq!(pretty_print_default(&parse_value("(a b c)").unwrap()), "(a b c)");
+    assert_eq!(
+        pretty_print_default(&parse_value("(a b c)").unwrap()),
+        "(a b c)"
+    );
     assert_eq!(pretty_print(&Value::Nil, &opts(0)), "()");
 }
 
@@ -117,7 +130,11 @@ fn keyword_alignment_disabled_keeps_kw_value_pair() {
     let v = parse_value(r#"(f :a 1 :bb 2)"#).unwrap();
     let s = pretty_print(
         &v,
-        &PrettyOpts { max_line_width: 5, align_keyword_args: false, ..PrettyOpts::default() },
+        &PrettyOpts {
+            max_line_width: 5,
+            align_keyword_args: false,
+            ..PrettyOpts::default()
+        },
     );
     assert!(s.contains("  :a 1"), "got: {:?}", s);
     assert!(s.contains("  :bb 2"), "got: {:?}", s);
@@ -149,7 +166,10 @@ fn top_forms_single_newline_when_disabled() {
     covers!([SpecItem::McpToolsPrettyBlankLineBetweenTopForms]);
     let a = parse_value("(define x 1)").unwrap();
     let b = parse_value("(define y 2)").unwrap();
-    let opts = PrettyOpts { blank_line_between_top_forms: false, ..PrettyOpts::default() };
+    let opts = PrettyOpts {
+        blank_line_between_top_forms: false,
+        ..PrettyOpts::default()
+    };
     let s = pretty_print_top_forms(&[a, b], &opts);
     assert_eq!(s, "(define x 1)\n(define y 2)");
 }
@@ -190,7 +210,10 @@ fn round_trip_atoms_and_lists() {
         for w in [10usize, 20, 40, 80, 200] {
             let s = pretty_print(&v, &opts(w));
             let r = parse_value(&s).unwrap_or_else(|e| {
-                panic!("re-parse failed: {} for {} at width {}\noutput:\n{}", e, input, w, s)
+                panic!(
+                    "re-parse failed: {} for {} at width {}\noutput:\n{}",
+                    e, input, w, s
+                )
             });
             assert_eq!(r, v, "round-trip failed for {} at width {}", input, w);
         }

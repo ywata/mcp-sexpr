@@ -65,9 +65,10 @@ pub use match_form::{match_form, FormMatch};
 
 pub use parser::{
     current_differential_mode, flush_discrepancy_dedup, parse_value_with_positions,
-    set_differential_mode, set_discrepancy_class_dedup_capacity, set_discrepancy_dedup_capacity, Comment, CommentKind, DifferentialMode, STDERR_REPORT_BUDGET,
-    Discrepancy, DiscrepancyInput, DiscrepancySink, LexprConversionError, ParseError, PathElement,
-    Position, Span, Spanned, SpannedNode, StructuralPath, Value,
+    set_differential_mode, set_discrepancy_class_dedup_capacity, set_discrepancy_dedup_capacity,
+    Comment, CommentKind, DifferentialMode, Discrepancy, DiscrepancyInput, DiscrepancySink,
+    LexprConversionError, ParseError, PathElement, Position, Span, Spanned, SpannedNode,
+    StructuralPath, Value, STDERR_REPORT_BUDGET,
 };
 
 // Feature-gated modules
@@ -579,7 +580,12 @@ mod tests {
         ] {
             let quoted = quote_str(original);
             let parsed = lexpr::from_str(&quoted).expect("lexpr parse");
-            assert_eq!(parsed.as_str(), Some(original), "round-trip failed for {:?}", original);
+            assert_eq!(
+                parsed.as_str(),
+                Some(original),
+                "round-trip failed for {:?}",
+                original
+            );
         }
     }
 }

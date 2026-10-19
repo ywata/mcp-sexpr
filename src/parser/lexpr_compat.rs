@@ -212,7 +212,10 @@ mod tests {
 
     #[test]
     fn value_to_lexpr_dotted_pair() {
-        covers!([SpecItem::McpToolsParserLexprConversion, SpecItem::McpToolsParserListRepresentation]);
+        covers!([
+            SpecItem::McpToolsParserLexprConversion,
+            SpecItem::McpToolsParserListRepresentation
+        ]);
 
         let v = Value::Pair(Box::new((Value::Integer(1), Value::Integer(2))));
         let lexpr_v = lexpr::Value::from(v.clone());
