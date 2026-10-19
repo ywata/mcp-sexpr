@@ -3,8 +3,7 @@ use std::fs;
 use std::io::ErrorKind;
 
 fn read_spec_files() -> Vec<String> {
-    let content = fs::read_to_string("spec-files.txt")
-        .expect("Failed to read spec-files.txt");
+    let content = fs::read_to_string("spec-files.txt").expect("Failed to read spec-files.txt");
     content
         .lines()
         .map(|line| line.trim())
@@ -25,8 +24,7 @@ fn main() {
         }
     }
 
-    let mut builder = Builder::new()
-        .require_prefix("mcp-tools");
+    let mut builder = Builder::new().require_prefix("mcp-tools");
     for doc in &docs {
         builder = builder.add_doc(doc);
     }
@@ -56,8 +54,6 @@ fn generate_failure_message(err: &BuilderError) -> String {
              from cargo's git checkout) denies that write. Re-run with that path \
              writable, or unsandboxed."
         ),
-        other => format!(
-            "Failed to generate traceability code into {output}: {other}"
-        ),
+        other => format!("Failed to generate traceability code into {output}: {other}"),
     }
 }
