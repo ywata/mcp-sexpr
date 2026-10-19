@@ -10,7 +10,7 @@ After install, a consumer should:
 
 1. Replace every `<project>` placeholder below with their project's spec-id prefix (e.g. `mcp-planner`).
 2. Adjust paths to their layout (`bin/` scripts, `docs/` guide names, the `../spec-trace` manifest path) and delete sections that don't apply.
-3. Run `/spec-customize` to finalize — it edits this same file in place.
+3. Run `/spec-customize` to finalize — it edits this same file in place. `/spec-customize` needs `mcp-planner` at commit `455e0ea` or later; after upgrading, run one `mcp-planner setup --update`. Then commit `project-conventions.md` together with `.project-conventions.default.md`, and when setup later reports a merge pending for this file, run `/merge-customizations`.
 
 ---
 
@@ -202,6 +202,19 @@ Place the `## Change Metadata` section at the top of the file, immediately after
 | `modified-spec-ids` | Existing spec-ids modified |
 | `retired-spec-ids` | Spec-ids being removed |
 | `non-testable-sections` | Spec-ids in this change that are non-testable |
+| `consumer-notice` | Who this change must tell, and how they were told — see § Consumer Notice. Never blank |
+
+### Consumer Notice
+
+`consumer-notice` carries exactly one of:
+
+- **the parties who must act**, each with the message id (or other reference) by which they were told;
+- **a reference alone**, when they were told while the work was still in flight;
+- **`(none)` with a reason**, when no notice is owed.
+
+The row is never blank and never omitted. It is settled **before the archive**.
+
+Notice is owed when a consumer must **do** something, or when something they already wrote stops being correct — not merely because they will receive different bytes. When it is unclear, write the sentence you would send: if it reads "we changed X, you need do nothing", no notice is owed and that sentence is the reason; if it reads "we changed X, run Y" or "… so your Z is now wrong", it is owed.
 
 ### Lifecycle Transitions
 
@@ -209,6 +222,7 @@ Place the `## Change Metadata` section at the top of the file, immediately after
 - `/make-plan` sets `Status: in-progress`, sets `plan-file:` to the generated `.scm` path.
 - `/exec-plan` sets `Status: completed` when all goals finish.
 - A commit that finalizes a change spec's work also sets `Status: completed` (for work completed outside `/exec-plan`).
+- `consumer-notice` is settled before archiving: any notice still owed is sent, and the row records it.
 - `/spec-change-archive` moves completed `.md` + `.scm` to `specs/changes/archive/`. **Archiving is a manual, user-run step** — completion does not trigger it automatically.
 
 ### Spec-Id Classification in Change Specs
