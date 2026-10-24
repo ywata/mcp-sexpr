@@ -1,16 +1,12 @@
-# Spec Project Conventions — Rust Project Template
+# Spec Project Conventions — Rust Project
 
-**This file is a shipped template, not this repository's live conventions.** It is packaged inside the `spec` skill and distributed by the spec-workflows bundle under `purpose = "ywata-rust-project"`, for Rust consumer projects that use spec-id annotations and the `spec-trace` toolchain (compile-time traceability + SQLite coverage recording).
+This file is this project's conventions for the `/spec-*` workflows: every `/spec-*` workflow reads it at startup and follows it. It is yours to edit. It started from the spec-workflows Rust project template, which `mcp-planner setup` installs under `purpose = "ywata-rust-project"`; that is why a later update of the template can arrive beside it as a staged `.project-conventions.incoming.md`.
 
-How it reaches a consumer: when a project runs `mcp-planner setup` with `--purpose ywata-rust-project`, `setup.toml` installs this file **renamed** (via `to_path`) to `.claude/skills/spec/project-conventions.md` — the live path every `/spec-*` workflow reads. So a Rust consumer gets working conventions out of the box.
+To adapt it to this project:
 
-In **this** repository (spec-workflows itself) this file is inert: our workflows read `project-conventions.md`, never this `-rust` file. Our own conventions live in the sibling `project-conventions.md`, which is deliberately **not** in the manifest and is never shipped.
-
-After install, a consumer should:
-
-1. Replace every `<project>` placeholder below with their project's spec-id prefix (e.g. `mcp-planner`).
-2. Adjust paths to their layout (`bin/` scripts, `docs/` guide names, the `../spec-trace` manifest path) and delete sections that don't apply.
-3. Run `/spec-customize` to finalize — it edits this same file in place. `/spec-customize` needs `mcp-planner` at commit `455e0ea` or later; after upgrading, run one `mcp-planner setup --update`. Then commit `project-conventions.md` together with `.project-conventions.default.md`, and when setup later reports a merge pending for this file, run `/merge-customizations`.
+1. Set the spec-id prefix: replace the `<doc>` component in § Spec-Id Conventions → Format with this project's prefix (e.g. `mcp-planner`). The examples below use `example-project` in its place.
+2. Adjust paths to this project's layout (`bin/` scripts, `docs/` guide names, the `../spec-trace` manifest path) and delete sections that don't apply.
+3. Run `/spec-customize` to finalize — it edits this file in place. `/spec-customize` needs `mcp-planner` at commit `455e0ea` or later; after upgrading, run one `mcp-planner setup --update`. Then commit `project-conventions.md` together with `.project-conventions.default.md`, and when setup later reports a merge pending for this file, run `/merge-customizations`.
 
 ---
 
@@ -50,7 +46,7 @@ After install, a consumer should:
 - Mark non-testable sections with the `non-testable` flag:
   ```markdown
   ## Design Rationale
-  <!-- spec-id: <project>/design/rationale non-testable -->
+  <!-- spec-id: example-project/design/rationale non-testable -->
   ```
 
 ### Non-Testable Classification
@@ -61,12 +57,14 @@ Do **not** use `non-testable` for: API behavior, data formats, algorithms, valid
 
 ### Examples
 
+`example-project` stands for this project's prefix (§ Format).
+
 ```markdown
 ## Register Plan
-<!-- spec-id: <project>/api-spec/register-plan -->
+<!-- spec-id: example-project/api-spec/register-plan -->
 
 ## Design Rationale
-<!-- spec-id: <project>/design/rationale non-testable -->
+<!-- spec-id: example-project/design/rationale non-testable -->
 ```
 
 ### After Spec Changes
@@ -154,8 +152,8 @@ A typical coverage script (e.g. `bin/check_coverage.sh`) assumes:
 [[moves]]
 old = "specs/api/claim-goal.md"
 new = "specs/api/planner/claim-goal.md"
-old_prefix = "<project>/api/claim-goal"
-new_prefix = "<project>/api/planner/claim-goal"
+old_prefix = "example-project/api/claim-goal"
+new_prefix = "example-project/api/planner/claim-goal"
 ```
 
 ### Note for `/spec-analyze`
