@@ -7,3 +7,4 @@ specs/migration/lexpr-deprecation.md
 specs/pretty/api.md
 specs/match-form/api.md
 specs/build/api.md
+specs/packaging/build-script.md
