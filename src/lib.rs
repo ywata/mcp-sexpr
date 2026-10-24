@@ -49,10 +49,13 @@
 #![deny(missing_docs)]
 
 // Generated traceability enum. Always available.
-// Skipped by rustfmt: build.rs regenerates it on every re-run, so formatting
-// it would be undone by the next build and break `cargo fmt --check`.
-#[rustfmt::skip]
-mod traceability_gen;
+// build.rs writes it under OUT_DIR only, never into the source tree
+// (specs/packaging/build-script.md); the lint sits here because `include!`
+// cannot carry the generator's inner `#![allow(missing_docs)]`.
+#[allow(missing_docs)]
+mod traceability_gen {
+    include!(concat!(env!("OUT_DIR"), "/traceability_gen.rs"));
+}
 pub use traceability_gen::SpecItem;
 
 // Position-tracking parser (replaces lexpr::Value as canonical representation).

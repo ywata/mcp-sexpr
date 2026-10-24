@@ -1,6 +1,7 @@
 use spec_trace::builder::{Builder, BuilderError};
 use std::fs;
-use std::io::ErrorKind;
+use std::io::{self, ErrorKind};
+use std::path::{Path, PathBuf};
 
 fn read_spec_files() -> Vec<String> {
     let content = fs::read_to_string("spec-files.txt").expect("Failed to read spec-files.txt");
@@ -24,36 +25,73 @@ fn main() {
         }
     }
 
-    let mut builder = Builder::new().require_prefix("mcp-tools");
-    for doc in &docs {
-        builder = builder.add_doc(doc);
+    let output = output_path();
+    let builder = docs.iter().fold(
+        Builder::new().require_prefix("mcp-tools"),
+        |builder, doc| builder.add_doc(doc),
+    );
+    if let Err(err) = builder.output(&output).generate() {
+        panic!("{}", generate_failure_message(&err, &output));
     }
-    if let Err(err) = builder.output(OUTPUT).generate() {
-        panic!("{}", generate_failure_message(&err));
+    if let Err(err) = strip_inner_attributes(&output) {
+        panic!("{}", io_failure_message(&err, &output));
     }
 }
 
-/// Generated file, relative to the crate root (`CARGO_MANIFEST_DIR`).
-const OUTPUT: &str = "src/traceability_gen.rs";
+/// Generated file name inside `OUT_DIR`; `src/lib.rs` `include!`s it from there.
+const OUTPUT_FILE: &str = "traceability_gen.rs";
+
+/// The generated file lives under `OUT_DIR` only: the crate source tree may be
+/// cargo's read-only git checkout (specs/packaging/build-script.md).
+fn output_path() -> PathBuf {
+    PathBuf::from(std::env::var_os("OUT_DIR").expect("cargo sets OUT_DIR for build scripts"))
+        .join(OUTPUT_FILE)
+}
+
+/// Drop the generator's leading inner attributes (`#![allow(missing_docs)]`):
+/// `include!` inside `mod traceability_gen { … }` rejects them, so `src/lib.rs`
+/// carries the lint as an outer attribute instead. A no-op when there are none.
+fn strip_inner_attributes(path: &Path) -> io::Result<()> {
+    let code = fs::read_to_string(path)?;
+    let stripped: String = code
+        .split_inclusive('\n')
+        .filter(|line| !line.trim_start().starts_with("#!["))
+        .collect();
+    if stripped == code {
+        Ok(())
+    } else {
+        fs::write(path, stripped)
+    }
+}
 
 /// Explain a generator failure. A denied I/O is reported as an environment
 /// problem naming the absolute output path, because it otherwise surfaces
 /// attached to whichever dependency change forced this build script to re-run.
-fn generate_failure_message(err: &BuilderError) -> String {
-    let output = std::env::var("CARGO_MANIFEST_DIR")
-        .map(|dir| format!("{}/{}", dir, OUTPUT))
-        .unwrap_or_else(|_| OUTPUT.to_string());
+fn generate_failure_message(err: &BuilderError, output: &Path) -> String {
     match err {
-        BuilderError::Io(io) if io.kind() == ErrorKind::PermissionDenied => format!(
-            "mcp-tools build script could not write the generated traceability file \
-             (or read a spec file listed in spec-files.txt): {io}\n\
-             output path: {output}\n\
-             This is an environment problem, not a code problem: the build script \
-             regenerates {OUTPUT} inside the crate source tree, and the current \
-             environment (e.g. an agent sandbox building mcp-tools as a dependency \
-             from cargo's git checkout) denies that write. Re-run with that path \
-             writable, or unsandboxed."
+        BuilderError::Io(io) => io_failure_message(io, output),
+        other => format!(
+            "Failed to generate traceability code into {}: {other}",
+            output.display()
         ),
-        other => format!("Failed to generate traceability code into {output}: {other}"),
+    }
+}
+
+fn io_failure_message(io: &io::Error, output: &Path) -> String {
+    match io.kind() {
+        ErrorKind::PermissionDenied => format!(
+            "mcp-tools build script could not read a spec file listed in spec-files.txt \
+             or write the generated traceability file: {io}\n\
+             output path: {}\n\
+             This is an environment problem, not a code problem: the build script writes \
+             only under OUT_DIR (cargo's target directory) and reads only spec-files.txt \
+             and the specs it lists. Re-run with those spec files readable and the target \
+             directory writable, or unsandboxed.",
+            output.display()
+        ),
+        _ => format!(
+            "Failed to generate traceability code into {}: {io}",
+            output.display()
+        ),
     }
 }
