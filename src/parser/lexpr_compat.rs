@@ -158,16 +158,7 @@ fn convert_cons_value(value: lexpr::Value) -> Result<Value, LexprConversionError
 mod tests {
     use super::*;
     use crate::SpecItem;
-
-    macro_rules! covers {
-        ([$($item:expr),* $(,)?]) => {
-            {
-                $(
-                    let _ = $item;
-                )*
-            }
-        };
-    }
+    use spec_trace::covers;
 
     fn parse_lexpr(input: &str) -> lexpr::Value {
         lexpr::from_str(input).unwrap()

@@ -159,12 +159,7 @@ fn variant_name(v: &Value) -> &'static str {
 mod tests {
     use super::*;
     use crate::{parse_value, SpecItem};
-
-    macro_rules! covers {
-        ([$($item:expr),* $(,)?]) => {
-            { $( let _ = $item; )* }
-        };
-    }
+    use spec_trace::covers;
 
     #[test]
     fn match_form_accepts_basic_shape() {

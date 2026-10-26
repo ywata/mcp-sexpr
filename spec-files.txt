@@ -8,3 +8,4 @@ specs/pretty/api.md
 specs/match-form/api.md
 specs/build/api.md
 specs/packaging/build-script.md
+specs/development/covers-macro.md
