@@ -484,16 +484,7 @@ fn is_symbol_continue(ch: char) -> bool {
 mod tests {
     use super::*;
     use crate::SpecItem;
-
-    macro_rules! covers {
-        ([$($item:expr),* $(,)?]) => {
-            {
-                $(
-                    let _ = $item;
-                )*
-            }
-        };
-    }
+    use spec_trace::covers;
 
     fn tokens_of(input: &str) -> Vec<Token> {
         tokenize(input)

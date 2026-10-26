@@ -68,12 +68,7 @@ pub fn integer(n: i64) -> Value {
 mod tests {
     use super::*;
     use crate::{parse_value, SpecItem};
-
-    macro_rules! covers {
-        ([$($item:expr),* $(,)?]) => {
-            { $( let _ = $item; )* }
-        };
-    }
+    use spec_trace::covers;
 
     #[test]
     fn cons_produces_pair() {

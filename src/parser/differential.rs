@@ -913,16 +913,7 @@ fn sha256_bytes(input: &[u8]) -> [u8; 32] {
 mod tests {
     use super::*;
     use crate::SpecItem;
-
-    macro_rules! covers {
-        ([$($item:expr),* $(,)?]) => {
-            {
-                $(
-                    let _ = $item;
-                )*
-            }
-        };
-    }
+    use spec_trace::covers;
 
     /// Serialises the tests that touch process-global state (the differential
     /// mode, the dedup cache, the stderr report counter).

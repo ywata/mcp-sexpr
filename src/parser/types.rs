@@ -338,16 +338,7 @@ impl Spanned {
 mod tests {
     use super::*;
     use crate::SpecItem;
-
-    macro_rules! covers {
-        ([$($item:expr),* $(,)?]) => {
-            {
-                $(
-                    let _ = $item;
-                )*
-            }
-        };
-    }
+    use spec_trace::covers;
 
     #[test]
     fn value_construction_and_predicates() {

@@ -94,18 +94,7 @@ fn test_complex_feature() {
 mod tests {
     use super::*;
     use crate::SpecItem;
-    
-    // Define compile-time coverage check macro
-    macro_rules! covers {
-        ([$($item:expr),* $(,)?]) => {
-            {
-                $(
-                    // Compile-time check that the item exists
-                    let _ = $item;
-                )*
-            }
-        };
-    }
+    use spec_trace::covers; // records coverage; never define covers! locally
 
     #[test]
     fn test_feature() {
@@ -114,6 +103,8 @@ mod tests {
     }
 }
 ```
+
+**Never define a local `covers!` macro.** A module-local `covers!` that expands to `let _ = $item;` keeps the compile-time check but drops the recording. The tests compile and pass, write zero rows to the coverage database, and nothing warns. Until 2026-10-26, this crate's `src/` tests recorded 0 rows this way. Use `spec_trace::covers` (or `tests/common`'s re-export). `tests/covers_macro_guard.rs` enforces this; see `specs/development/covers-macro.md`.
 
 ### Mandatory Workflow
 

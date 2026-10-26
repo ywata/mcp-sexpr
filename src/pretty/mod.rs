@@ -254,12 +254,7 @@ fn split_keyword_tail(tail: &[Value]) -> Option<(usize, Vec<usize>)> {
 mod tests {
     use super::*;
     use crate::{parse_value, SpecItem};
-
-    macro_rules! covers {
-        ([$($item:expr),* $(,)?]) => {
-            { $( let _ = $item; )* }
-        };
-    }
+    use spec_trace::covers;
 
     fn opts(width: usize) -> PrettyOpts {
         PrettyOpts {
