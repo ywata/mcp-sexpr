@@ -1,0 +1,44 @@
+(goal "covers-check-via-spec-trace"
+  :spec (use "specs/changes/2026-10-28-covers-check-via-spec-trace.md")
+  :outputs ((file "Cargo.lock") (doc "guard-retired") (file "CLAUDE.md") (file "bin/check_coverage.sh") (file ".github/workflows/ci.yml") (doc "verification-report"))
+  :goals (
+    (goal "update-spec-trace-pin"
+      :spec "Run cargo update -p spec-trace (expect 5b1da0b -> a344b66 or later) and record the new revision. cargo test --all-features passes. Preserve: [No other dependency changes, All tests pass]"
+      :descr "transform"
+      :atomic #t
+      :outputs ((file "Cargo.lock")))
+    (goal "retire-guard-and-spec"
+      :spec "Delete tests/covers_macro_guard.rs and specs/development/covers-macro.md, and remove the specs/development/covers-macro.md line from spec-files.txt (other lines and order unchanged). Run cargo build; confirm no source references SpecItem::McpToolsDevelopmentCoversMustRecord or McpToolsDevelopmentDesignRationale. cargo test --all-features passes."
+      :descr "delete"
+      :atomic #t
+      :depends ("update-spec-trace-pin")
+      :inputs ((file "Cargo.lock"))
+      :outputs ((doc "guard-retired")))
+    (goal "cite-spec-trace-in-claude-md"
+      :spec "In CLAUDE.md, rewrite the 'Never define a local covers! macro' paragraph: keep the failure description and the 2026-10-26 history, drop the references to tests/covers_macro_guard.rs and specs/development/covers-macro.md, and cite spec-trace's rule spec-trace-spec/impl/covers-must-record and its check `spec-trace check-macros --docs CLAUDE.md` (run by CI and bin/check_coverage.sh). No path to a change spec. Preserve: [All other CLAUDE.md sections unchanged, Library-test template keeps use spec_trace::covers]"
+      :descr "transform"
+      :atomic #t
+      :depends ("retire-guard-and-spec")
+      :inputs ((doc "guard-retired"))
+      :outputs ((file "CLAUDE.md")))
+    (goal "replace-coverage-script"
+      :spec "Replace bin/check_coverage.sh (discarding the uncommitted local edit) with: #!/bin/bash, a one-line comment, `spec-trace check-macros --docs CLAUDE.md || exit 1`, `exec spec-trace run --threshold 100 \"$@\" -- cargo test --all-features --no-fail-fast`. Keep it executable. Run it with --db pointing at a scratch path; expect check-macros clean and 100.0% coverage (49/49). Preserve: [Script path unchanged, Executable bit kept]"
+      :descr "transform"
+      :atomic #t
+      :depends ("cite-spec-trace-in-claude-md")
+      :inputs ((file "CLAUDE.md"))
+      :outputs ((file "bin/check_coverage.sh")))
+    (goal "add-ci-check-macros"
+      :spec "In .github/workflows/ci.yml test job, after the toolchain step and before the read-only step: read the spec-trace rev from Cargo.lock (the #<sha> of the spec-trace source line), cargo install --locked --git ssh://git@github.com/ywata/spec-trace --rev <sha> spec-trace, then run spec-trace check-macros --docs CLAUDE.md. Comment why (spec-trace owns the rule; CLI at the locked rev). Validate the YAML parses. Preserve: [Existing steps and their order unchanged, docs job unchanged]"
+      :descr "transform"
+      :atomic #t
+      :depends ("replace-coverage-script")
+      :inputs ((file "bin/check_coverage.sh"))
+      :outputs ((file ".github/workflows/ci.yml")))
+    (goal "verify-and-complete"
+      :spec "Run cargo test --all-features, cargo clippy -- -D warnings, cargo fmt --check, RUSTDOCFLAGS='-D warnings' cargo doc --no-deps, spec-trace check-macros --docs CLAUDE.md, and the reference check (no tracked file outside specs/changes/ refers to a change spec by path). Add a Completion Record to the change spec (new spec-trace rev, coverage numbers, checks) and set Status to completed (do not archive)."
+      :descr "check"
+      :atomic #t
+      :depends ("add-ci-check-macros")
+      :inputs ((file ".github/workflows/ci.yml"))
+      :outputs ((doc "verification-report")))))
