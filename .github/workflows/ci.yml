@@ -22,6 +22,18 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SPEC_TRACE_SSH_KEY }}
       - uses: dtolnay/rust-toolchain@stable
+      # spec-trace owns the rule that tests record coverage through its covers!
+      # (spec-trace-spec/impl/covers-must-record). Its check-macros command finds
+      # local covers! definitions. Install the CLI at the revision this run
+      # resolves for the library, so the check and the macro match.
+      - name: Install spec-trace CLI
+        run: |
+          cargo generate-lockfile
+          rev=$(sed -n 's|^source = "git+ssh://git@github.com/ywata/spec-trace#\([0-9a-f]*\)"$|\1|p' Cargo.lock | head -n 1)
+          test -n "$rev"
+          cargo install --locked --git ssh://git@github.com/ywata/spec-trace --rev "$rev" spec-trace
+      - name: Check for local covers! macros
+        run: spec-trace check-macros --docs CLAUDE.md
       # The build script must write only under OUT_DIR, since consumers build
       # from cargo's read-only git checkout (specs/packaging/build-script.md).
       # A read-only source tree turns any such write into a CI failure.
