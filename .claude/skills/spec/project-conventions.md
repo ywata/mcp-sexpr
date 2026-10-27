@@ -2,11 +2,7 @@
 
 This file is this project's conventions for the `/spec-*` workflows: every `/spec-*` workflow reads it at startup and follows it. It is yours to edit. It started from the spec-workflows Rust project template, which `mcp-planner setup` installs under `purpose = "ywata-rust-project"`; that is why a later update of the template can arrive beside it as a staged `.project-conventions.incoming.md`.
 
-To adapt it to this project:
-
-1. Set the spec-id prefix: replace the `<doc>` component in § Spec-Id Conventions → Format with this project's prefix (e.g. `mcp-planner`). The examples below use `example-project` in its place.
-2. Adjust paths to this project's layout (`bin/` scripts, `docs/` guide names, the `../spec-trace` manifest path) and delete sections that don't apply.
-3. Run `/spec-customize` to finalize — it edits this file in place. `/spec-customize` needs `mcp-planner` at commit `455e0ea` or later; after upgrading, run one `mcp-planner setup --update`. Then commit `project-conventions.md` together with `.project-conventions.default.md`, and when setup later reports a merge pending for this file, run `/merge-customizations`.
+It is customized for this crate, `mcp-tools` (repository `mcp-sexpr`): the spec-id prefix is `mcp-tools`, the paths below are this repository's, and archiving is a separate, user-run step (§ Lifecycle Transitions). When setup reports a merge pending for this file, run `/merge-customizations`; commit `project-conventions.md` together with `.project-conventions.default.md`.
 
 ---
 
@@ -18,7 +14,7 @@ To adapt it to this project:
 - **Archived change specs**: `specs/changes/archive/`
 - **Spec file list**: `spec-files.txt` (root of repository)
 - **Composition guide**: `.claude/skills/spec/spec-composition-guide.md`
-- **Implied tasks**: `docs/implied-tasks.md` (if the project maintains one)
+- **Implied tasks**: none — this project maintains no implied-tasks document
 
 ---
 
@@ -30,7 +26,7 @@ To adapt it to this project:
 ### Format
 
 ```
-<doc>/<category>/<item>[/<subitem>...]
+mcp-tools/<category>/<item>[/<subitem>...]
 ```
 
 - Lowercase, kebab-case, ASCII only.
@@ -46,7 +42,7 @@ To adapt it to this project:
 - Mark non-testable sections with the `non-testable` flag:
   ```markdown
   ## Design Rationale
-  <!-- spec-id: example-project/design/rationale non-testable -->
+  <!-- spec-id: mcp-tools/design/rationale non-testable -->
   ```
 
 ### Non-Testable Classification
@@ -57,14 +53,12 @@ Do **not** use `non-testable` for: API behavior, data formats, algorithms, valid
 
 ### Examples
 
-`example-project` stands for this project's prefix (§ Format).
-
 ```markdown
 ## Register Plan
-<!-- spec-id: example-project/api-spec/register-plan -->
+<!-- spec-id: mcp-tools/api-spec/register-plan -->
 
 ## Design Rationale
-<!-- spec-id: example-project/design/rationale non-testable -->
+<!-- spec-id: mcp-tools/design/rationale non-testable -->
 ```
 
 ### After Spec Changes
@@ -140,11 +134,12 @@ Rollback: `git checkout HEAD -- . && git clean -fd`
 
 ### Coverage Script Assumptions
 
-A typical coverage script (e.g. `bin/check_coverage.sh`) assumes:
+The coverage script `bin/check_coverage.sh` assumes:
 
 - The repo root contains `spec-files.txt`.
 - Tests are executed with `SPEC_TRACE_DB=coverage.db`.
-- The `spec-trace` CLI is available — adjust the invocation to where your checkout lives (e.g. `cargo run --manifest-path ../spec-trace/Cargo.toml`).
+- The `spec-trace` CLI is installed, pinned to the rev this project's `Cargo.lock` names (see `docs/spec-trace-guide.md`).
+- The script runs `spec-trace run --threshold <this project's threshold>`; the threshold is set in the script only.
 
 ### Mapping File Format
 
@@ -152,8 +147,8 @@ A typical coverage script (e.g. `bin/check_coverage.sh`) assumes:
 [[moves]]
 old = "specs/api/claim-goal.md"
 new = "specs/api/planner/claim-goal.md"
-old_prefix = "example-project/api/claim-goal"
-new_prefix = "example-project/api/planner/claim-goal"
+old_prefix = "mcp-tools/api/claim-goal"
+new_prefix = "mcp-tools/api/planner/claim-goal"
 ```
 
 ### Note for `/spec-analyze`
@@ -181,8 +176,7 @@ DATESTAMP-NAME.md
 - The associated goal tree file uses the same name with `.scm` extension: `DATESTAMP-NAME.scm`.
 
 Examples:
-- `specs/changes/2026-02-21-setup-purpose-marker.md` → `specs/changes/2026-02-21-setup-purpose-marker.scm`
-- `specs/changes/2026-02-21-parallel-execution.md` → `specs/changes/2026-02-21-parallel-execution.scm`
+- `specs/changes/<date>-<topic>.md` → `specs/changes/<date>-<topic>.scm`
 
 ### Metadata Fields
 
@@ -221,7 +215,7 @@ Notice is owed when a consumer must **do** something, or when something they alr
 - `/exec-plan` sets `Status: completed` when all goals finish.
 - A commit that finalizes a change spec's work also sets `Status: completed` (for work completed outside `/exec-plan`).
 - `consumer-notice` is settled before archiving: any notice still owed is sent, and the row records it.
-- `/spec-change-archive` moves completed `.md` + `.scm` to `specs/changes/archive/`. **Archiving is a manual, user-run step** — completion does not trigger it automatically.
+- `/spec-change-archive` moves completed `.md` + `.scm` to `specs/changes/archive/`. **Archiving is a separate, user-run step**: it runs only when the maintainer says so, never as part of completion. It stops while any tracked file outside `specs/changes/` still refers to a file being archived by path; cite a change spec by title, date and completing commit instead.
 
 ### Spec-Id Classification in Change Specs
 
