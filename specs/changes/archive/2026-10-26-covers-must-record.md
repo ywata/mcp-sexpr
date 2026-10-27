@@ -20,7 +20,7 @@
 | modified-spec-ids | (none) |
 | retired-spec-ids | (none) |
 | non-testable-sections | `mcp-tools/development/design-rationale` |
-| consumer-notice | granter (requester, msg 986; plan agreed in msg 1004/1008) — owed: the commit sha plus before/after coverage numbers, after merge. Other consumers: (none) — test-only change; "we changed how our own tests record coverage, you need do nothing" |
+| consumer-notice | granter (requester, msg 986; plan agreed in msg 1004/1008) — told: merge commit 6dbe265 and the before/after coverage numbers in msg 1012. Other consumers: (none) — test-only change; "we changed how our own tests record coverage, you need do nothing" |
 
 ## Summary
 <!-- spec-id: mcp-tools-changes/covers-must-record/summary non-testable -->
@@ -113,4 +113,4 @@ Why a source sweep instead of a database check, why `CLAUDE.md` is swept, why th
 - **Guard**: `tests/covers_macro_guard.rs` — sweep flagged all 9 sites (8 `src/` files + `CLAUDE.md:99`) before the fix and passes after; control passes.
 - **Guide**: `mcp-planner setup --update` refreshed `docs/spec-trace-guide.md` to mcp-planner's fixed copy (0 local definitions). The guide is git-excluded in this repo, so there is nothing to commit for it; setup changed no tracked file and no customizable file was merge-pending.
 - **Checks**: `cargo test --all-features` 318 passed, 0 failed; `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo doc --no-deps` (`-D warnings`) clean. Known, out of scope: `cargo clippy --tests/--all-targets` fails on main already (`tests/parser_grammar.rs`, `tests/parser_api.rs`); the guard itself is clippy-clean.
-- **Consumer notice**: granter (msg 986; plan agreed in 1004/1008). Still owed after merge: the commit sha and the numbers above. Archive waits for the maintainer.
+- **Consumer notice**: granter (msg 986; plan agreed in 1004/1008). Merge commit 6dbe265 and the numbers above sent in msg 1012 (2026-10-26). Settled.

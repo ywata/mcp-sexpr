@@ -20,7 +20,7 @@
 | modified-spec-ids | (none) |
 | retired-spec-ids | (none) |
 | non-testable-sections | `mcp-tools/packaging/design-rationale` |
-| consumer-notice | granter (requester, msg 938; scheduled in msg 941) — owed: report the merge commit so mcp-grant can bump its lock. Other consumers: (none) — planner and compose pin a `rev`, mailbox locks f5d0503, none use `SpecItem`, and the sentence would read "we changed where the build writes, you need do nothing" |
+| consumer-notice | granter (requester, msg 938; scheduled in msg 941) — told: merge commit d16e53f reported in msg 943, so mcp-grant can bump its lock. Other consumers: (none) — planner and compose pin a `rev`, mailbox locks f5d0503, none use `SpecItem`, and the sentence would read "we changed where the build writes, you need do nothing" |
 
 ## Summary
 <!-- spec-id: mcp-tools-changes/traceability-out-dir/summary non-testable -->
@@ -114,4 +114,4 @@ Why `OUT_DIR`; why the inner-attribute handling below; why the read-only CI guar
 - **Spec-ids**: `mcp-tools/packaging/generated-code-location`, `mcp-tools/packaging/spec-item-path`, `mcp-tools/packaging/design-rationale` present in `specs/packaging/build-script.md`, which is listed in `spec-files.txt`; this change spec is not.
 - **Tests**: `cargo clean -p mcp-tools`, then with `src specs tests spec-files.txt build.rs Cargo.toml` read-only: `cargo build` + `cargo test --all-features` — 316 passed, 0 failed; `src/traceability_gen.rs` not recreated. `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo doc --no-deps` (`-D warnings`) clean.
 - **Known, out of scope**: `cargo clippy --all-targets -- -D warnings` fails on main already (`tests/parser_grammar.rs` approx_constant, `tests/parser_api.rs` type_complexity); CI does not run it.
-- **Consumer notice**: granter told in flight (msg 941: scheduled, merge commit to follow). Still owed: the merge commit, after merge — send it before `/spec-change-archive`.
+- **Consumer notice**: granter told in flight (msg 941: scheduled, merge commit to follow). Merge commit d16e53f reported in msg 943 (2026-10-24). Settled.
