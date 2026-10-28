@@ -20,7 +20,7 @@
 | modified-spec-ids | (none) |
 | retired-spec-ids | `mcp-tools/development/covers-must-record`, `mcp-tools/development/design-rationale` |
 | non-testable-sections | (none) |
-| consumer-notice | granter (requester; plan agreed in msg 1070, decided in 1076, hold lifted in 1106) — owed: the merge commit, after merge. Other consumers: (none) — "we moved our own covers! check to spec-trace's CLI, you need do nothing" |
+| consumer-notice | granter (requester; plan agreed in msg 1070, decided in 1076, hold lifted in 1106) — told of the merge commit 1c7aeb3 in msg 1114, settled (1116 confirmed it). Other consumers: (none) — "we moved our own covers! check to spec-trace's CLI, you need do nothing" |
 
 ## Summary
 <!-- spec-id: mcp-tools-changes/covers-check-via-spec-trace/summary non-testable -->
@@ -106,4 +106,5 @@ Installing at the revision this run resolved keeps the CLI's check and the libra
 - **Retired**: `tests/covers_macro_guard.rs`, `specs/development/covers-macro.md` and its `spec-files.txt` line; `mcp-tools/development/covers-must-record` and `mcp-tools/development/design-rationale` are gone from `SpecItem`, and only archived change specs still name them.
 - **Coverage** (`bin/check_coverage.sh`, CLI a344b66): check-macros clean (43 Rust files, 1 document); 49 / 49 testable specs = 100.0% with `--all-features`.
 - **Checks**: `cargo test --all-features` 316 passed, 0 failed (318 before, minus the 2 guard tests); `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo doc --no-deps` (`-D warnings`) clean; CI YAML parses; reference check finds no change-spec path outside `specs/changes/`.
-- **Consumer notice**: granter (1070/1076/1106). Still owed after merge: the merge commit. Archive waits for the maintainer.
+- **Consumer notice**: granter (1070/1076/1106); merge commit 1c7aeb3 sent in msg 1114, confirmed in 1116 — settled. Archive waits for the maintainer.
+- **Follow-up** (granter msg 1116): `bin/check_coverage.sh` gained a comment line saying the test command is fixed and `-- <cmd>` cannot replace it (a `-- <cmd>` argument would be appended before the fixed `-- cargo test …` and fail).
