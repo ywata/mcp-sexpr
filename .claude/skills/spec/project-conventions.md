@@ -91,7 +91,7 @@ For projects that want `SPEC_TRACE_DB` + SQLite coverage reporting:
 2. Maintain `spec-files.txt` as the shared source of truth for spec docs.
 3. Run `cargo build` after spec changes to regenerate the traceability code.
 4. Ensure tests use `spec_trace::covers` (directly or via a re-export) so coverage events are recorded.
-5. Run tests with `SPEC_TRACE_DB=coverage.db cargo test` before running the coverage report.
+5. Produce the coverage report with `spec-trace run` (or a project script that calls it); it runs the tests itself, so do not set `SPEC_TRACE_DB` by hand.
 
 ### Available Subcommands
 
@@ -137,7 +137,7 @@ Rollback: `git checkout HEAD -- . && git clean -fd`
 The coverage script `bin/check_coverage.sh` assumes:
 
 - The repo root contains `spec-files.txt`.
-- Tests are executed with `SPEC_TRACE_DB=coverage.db`.
+- The tests are run by `spec-trace run`, not by the script directly.
 - The `spec-trace` CLI is installed, pinned to the rev this project's `Cargo.lock` names (see `docs/spec-trace-guide.md`).
 - The script runs `spec-trace run --threshold <this project's threshold>`; the threshold is set in the script only.
 
@@ -173,10 +173,10 @@ DATESTAMP-NAME.md
 - `DATESTAMP` is the creation date in `YYYY-MM-DD` format.
 - `NAME` is a short kebab-case description of the change.
 - Do **not** append `-change-spec` or `-spec` to the filename. The `specs/changes/` location already conveys that the file is a change spec.
-- The associated goal tree file uses the same name with `.scm` extension: `DATESTAMP-NAME.scm`.
+- The associated goal tree uses the same name: `DATESTAMP-NAME.plan` (source) and `DATESTAMP-NAME.scm` (compiled).
 
 Examples:
-- `specs/changes/<date>-<topic>.md` → `specs/changes/<date>-<topic>.scm`
+- `specs/changes/<date>-<topic>.md` → `specs/changes/<date>-<topic>.plan` + `.scm`
 
 ### Metadata Fields
 
@@ -185,7 +185,7 @@ Place the `## Change Metadata` section at the top of the file, immediately after
 | Field | Description |
 |---|---|
 | `Status` | `proposed` → `in-progress` → `completed` |
-| `plan-file` | Path to associated `.scm` goal tree (set during `/make-plan`) |
+| `plan-file` | Path to the associated `.plan` goal tree (set during `/make-plan`); where no `.plan` exists, the `.scm`. Existing rows are not re-pointed |
 | `updates` | Existing spec files being updated |
 | `adds` | New spec files being added |
 | `obsoletes` | Spec files being removed |
@@ -211,11 +211,11 @@ Notice is owed when a consumer must **do** something, or when something they alr
 ### Lifecycle Transitions
 
 - `/spec-change` sets `Status: proposed`, `plan-file: (none)`.
-- `/make-plan` sets `Status: in-progress`, sets `plan-file:` to the generated `.scm` path.
+- `/make-plan` sets `Status: in-progress`, sets `plan-file:` to the generated `.plan` path.
 - `/exec-plan` sets `Status: completed` when all goals finish.
 - A commit that finalizes a change spec's work also sets `Status: completed` (for work completed outside `/exec-plan`).
 - `consumer-notice` is settled before archiving: any notice still owed is sent, and the row records it.
-- `/spec-change-archive` moves completed `.md` + `.scm` to `specs/changes/archive/`. **Archiving is a separate, user-run step**: it runs only when the maintainer says so, never as part of completion. It stops while any tracked file outside `specs/changes/` still refers to a file being archived by path; cite a change spec by title, date and completing commit instead.
+- `/spec-change-archive` moves completed `.md` + `.plan` + `.scm` to `specs/changes/archive/` as tracked files; goal trees are tracked like source, never force-added. **Archiving is a separate, user-run step**: it runs only when the maintainer says so, never as part of completion. It stops while any tracked file outside `specs/changes/` still refers to a file being archived by path; cite a change spec by title, date and completing commit instead.
 
 ### Spec-Id Classification in Change Specs
 
