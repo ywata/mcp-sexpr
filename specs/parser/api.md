@@ -139,6 +139,38 @@ normalized into the other.
 `get_kw_str` and `require_kw_str` are thin wrappers over `get_kw_value` and inherit
 these scanning rules; they add only the string type-check on the extracted value.
 
+## List Iteration
+<!-- spec-id: mcp-tools/parser/list-iteration -->
+
+`iter_list` walks a proper list; `parse_str_list` reads a proper list of strings.
+
+```rust
+pub fn iter_list(value: &Value) -> Result<impl Iterator<Item = Value>>;
+pub fn parse_str_list(value: &Value) -> Result<Vec<String>>;
+```
+
+`iter_list` accepts exactly two variants:
+
+- `Value::List(items)` → `Ok`, iterating clones of `items` in order.
+- `Value::Nil` → `Ok`, empty. `()` is the empty list.
+
+Every other variant is an error, `expected list, got <variant>`, where `<variant>` is the
+lowercase name `match_form` errors use: `bool`, `integer`, `float`, `string`, `symbol`,
+`keyword`, `pair`. This includes `Pair`: a dotted pair `(a . b)` and an improper list
+`(a b . c)` are rejected whole — no item is yielded and no tail is dropped. A scalar
+where a list belongs is malformed input, not an empty list; a caller that treats a
+missing keyword as empty already gets `Ok(None)` from `get_kw_value` and decides there.
+
+A proper list written with a redundant dot, `(a b . (c))`, parses to `List`
+(`specs/parser/value-types.md` § List Representation) and iterates normally.
+
+`parse_str_list` is `iter_list` followed by a per-item string check. It inherits the rule
+above — a non-list is the `expected list` error, possibly with added context — and
+returns `expected string item in list` for an item that is not a `String`.
+
+The deprecated `iter_list_lexpr` and `parse_str_list_lexpr` keep their earlier behavior
+until they are removed in 1.0.
+
 ## API Deprecation
 <!-- spec-id: mcp-tools/parser/api-deprecation -->
 

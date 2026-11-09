@@ -143,7 +143,7 @@ Proper lists are stored as `Value::List(Vec<Value>)`. Indexing, slicing, iterati
 
 In practice, MCP consumer payloads almost never use improper tails beyond the simple `(key . value)` form, so the common case is `List(Vec<Value>)` end-to-end.
 
-The `iter_list` and `as_list` helpers on `Value` return `Some` only for `List`, never for `Pair`. Code that wants to walk improper lists handles `Pair` explicitly.
+`Value::as_list` returns `Some` only for `List`, never for `Pair`. The free function `iter_list` accepts `List` and `Nil` and returns an error for every other variant, `Pair` included (`specs/parser/api.md` § List Iteration). Code that wants to walk improper lists handles `Pair` explicitly.
 
 ## Design Rationale
 <!-- spec-id: mcp-tools/parser/design-rationale non-testable -->

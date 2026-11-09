@@ -1,0 +1,20 @@
+(plan "iter-list-rejects-non-list"
+  :spec (use "specs/changes/2026-11-09-iter-list-rejects-non-list.md")
+  :goals (do
+    (spec <- transform "write-list-iteration-spec"
+      :spec "In specs/parser/api.md add a new ## List Iteration section after ## Keyword Argument Extraction with <!-- spec-id: mcp-tools/parser/list-iteration --> (testable), content as in the change spec's 'Target: List Iteration' (iter_list: List iterates clones in order, Nil empty, every other variant including Pair is Err 'expected list, got <variant>' with match_form's variant names; parse_str_list inherits it and keeps 'expected string item in list'; (a b . (c)) parses to List; _lexpr variants unchanged). In specs/parser/value-types.md ## List Representation replace the last paragraph with the change spec's 'Target: List Representation' text. No path to a change spec. Run cargo build; SpecItem gains McpToolsParserListIteration."
+      :out ((file "specs/parser/api.md") (file "specs/parser/value-types.md"))
+      :preserve ("All other sections and spec-ids unchanged" "spec-files.txt unchanged"))
+    (tests <- realize "write-list-iteration-tests"
+      :spec "Add tests/list_iteration.rs covering the change spec's five test obligations, each test starting with covers!([SpecItem::McpToolsParserListIteration]) via tests/common: (1) (a b c) -> 3 items in order, () -> Ok 0 items; (2) \"a\", 1, 1.5, #t, foo, :k -> Err containing 'expected list' and the variant name; (3) (a . b) -> Err naming pair, (a b . c) -> Err; (4) parse_str_list: (\"a\" \"b\") -> [a,b], \"a\" -> Err, (a . b) -> Err, (\"a\" 1) -> Err 'expected string item in list'. Confirm groups 2-4 fail against the current code before the fix (record which)."
+      :in ((from spec))
+      :out ((file "tests/list_iteration.rs")))
+    (code <- transform "reject-non-lists"
+      :spec "In src/lib.rs, iter_list matches Value::List and Value::Nil only; any other variant returns Err(anyhow!(\"expected list, got {}\", variant_name(value))). Reuse match_form's variant_name (make it pub(crate) or move it beside Value) instead of copying it; if match_form is feature-gated, place the helper where both can use it. Remove the Pair-walking branch. Update the iter_list rustdoc to state the rule (replace 'For non-list inputs this returns an empty iterator'). parse_str_list needs no change beyond inheriting it. iter_list_lexpr and parse_str_list_lexpr unchanged. All tests pass, including tests/list_iteration.rs."
+      :in ((from tests))
+      :out ((file "src/lib.rs"))
+      :preserve ("Public signatures unchanged" "Deprecated _lexpr variants unchanged" "match_form error messages unchanged" "All existing tests pass"))
+    (check "verify-and-complete"
+      :spec "Run cargo test --all-features, cargo clippy -- -D warnings, cargo fmt --check, RUSTDOCFLAGS='-D warnings' cargo doc --no-deps, and bin/check_coverage.sh with --db at a scratch path (expect 100%). Check no tracked file outside specs/changes/ refers to a change spec by path. Add a Completion Record to the change spec (tests added, which failed before the fix, coverage numbers, checks) and set Status to completed in the header and Change Metadata (do not archive)."
+      :in ((from code))
+      :out ((doc "verification-report")))))
