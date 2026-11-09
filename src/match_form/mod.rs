@@ -141,7 +141,7 @@ pub fn match_form<'a>(value: &'a Value, expected_head: &str) -> Result<FormMatch
     })
 }
 
-fn variant_name(v: &Value) -> &'static str {
+pub(crate) fn variant_name(v: &Value) -> &'static str {
     match v {
         Value::Nil => "nil",
         Value::Bool(_) => "bool",

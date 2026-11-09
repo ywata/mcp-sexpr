@@ -106,7 +106,7 @@ pub mod router;
 #[cfg(feature = "errors")]
 pub mod errors;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 
 /// Parse a full S-expression string into the new [`Value`] representation.
 ///
@@ -280,9 +280,10 @@ pub fn require_kw_str_lexpr(root: &lexpr::Value, key: &str) -> Result<String> {
 
 /// Iterate over a proper list.
 ///
-/// Returns an iterator over the list items, owned via clone. For non-list inputs
-/// this returns an empty iterator (matching the previous lexpr-based behavior on
-/// non-cons inputs).
+/// Returns an iterator over the list items, owned via clone. `Nil` (the empty
+/// list) yields no items. Every other variant — a scalar, or a `Pair` (dotted
+/// pair or improper list) — is an error, `expected list, got <variant>`; nothing
+/// is yielded and no tail is dropped.
 ///
 /// # Example
 ///
@@ -292,22 +293,14 @@ pub fn require_kw_str_lexpr(root: &lexpr::Value, key: &str) -> Result<String> {
 /// let value = parse_value("(a b c)").unwrap();
 /// let items: Vec<_> = iter_list(&value).unwrap().collect();
 /// assert_eq!(items.len(), 3);
+///
+/// assert!(iter_list(&parse_value("\"a\"").unwrap()).is_err());
 /// ```
 pub fn iter_list(value: &Value) -> Result<impl Iterator<Item = Value>> {
     let items: Vec<Value> = match value {
         Value::List(items) => items.clone(),
         Value::Nil => Vec::new(),
-        Value::Pair(_) => {
-            let mut out = Vec::new();
-            let mut cur = value.clone();
-            while let Value::Pair(pair) = cur {
-                let (car, cdr) = *pair;
-                out.push(car);
-                cur = cdr;
-            }
-            out
-        }
-        _ => Vec::new(),
+        other => bail!("expected list, got {}", match_form::variant_name(other)),
     };
     Ok(items.into_iter())
 }
