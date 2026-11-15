@@ -21,7 +21,8 @@
 | new-spec-ids | (none) |
 | modified-spec-ids | `mcp-tools/parser/spanned-type` (discrimination contract + obligations), `mcp-tools/parser/parse-value-with-positions` (equivalence-test input list extended) |
 | retired-spec-ids | (none) |
-| non-testable-sections | `mcp-tools-changes/spanned-variant-discrimination/metadata`, `.../summary`, `.../method`, `.../gate-results`, `.../coverage-caveat`, `.../non-goals`, `.../decisions`, `.../next-steps` |
+| non-testable-sections | `mcp-tools-changes/spanned-variant-discrimination/metadata`, `.../summary`, `.../contract`, `.../method`, `.../obligations`, `.../gate-results`, `.../coverage-caveat`, `.../non-goals`, `.../decisions`, `.../next-steps` |
+| consumer-notice | composer (mcp-compose, the consumer whose spanned-path reliance this pins): told of 4ded38b in msg 118 on thread `symbols-not-strings`, settled. Other consumers: (none) — "we pinned behavior that already held; you need do nothing" |
 
 ## Summary
 <!-- spec-id: mcp-tools-changes/spanned-variant-discrimination/summary non-testable -->
@@ -44,7 +45,7 @@ The last is the reader that re-parses a `report :value …` record, so `(record 
 This change adds no behavior. It states the contract and pins it.
 
 ## Variant discrimination on the spanned path
-<!-- spec-id: mcp-tools-changes/spanned-variant-discrimination/contract -->
+<!-- spec-id: mcp-tools-changes/spanned-variant-discrimination/contract non-testable -->
 
 Permanent home: `specs/parser/value-types.md` § Spanned Type (`mcp-tools/parser/spanned-type`) gains a paragraph after the "mirrors `Value` shape exactly" sentence, stating:
 
@@ -53,6 +54,8 @@ Permanent home: `specs/parser/value-types.md` § Spanned Type (`mcp-tools/parser
 - **`into_value` preserves the variant.** `Spanned::into_value` and `to_value` map `SpannedNode::Keyword(s) -> Value::Keyword(s)` and `SpannedNode::Symbol(s) -> Value::Symbol(s)`. Neither is coerced to `String`, and neither is normalized into the other.
 
 Cross-reference both ways: the `keyword-canonicalization` section gains a pointer noting the property holds on the spanned path too.
+
+_Archive note (2026-11-09): `contract` and `obligations` are marked `non-testable` here because, per `q-new-spec-id`, their content lives under the permanent `mcp-tools/parser/spanned-type` (specs/parser/value-types.md § Spanned Type) and is tested there (tests/parser_types.rs, tests/parser_api.rs); the change spec's own ids are documentation only._
 
 ## Method: falsification-gated TDD
 <!-- spec-id: mcp-tools-changes/spanned-variant-discrimination/method non-testable -->
@@ -79,7 +82,7 @@ The mutations:
 A mutation that also reddens pre-existing tests is fine — the gate asks whether the *new* test is live, not whether it is the only one. `m-to-value` is the exception worth watching: if **no** test fails under it, the `to_value` arms are unpinned entirely, which is a finding to record and close rather than a reason to skip the mutation.
 
 ## Test obligations
-<!-- spec-id: mcp-tools-changes/spanned-variant-discrimination/obligations -->
+<!-- spec-id: mcp-tools-changes/spanned-variant-discrimination/obligations non-testable -->
 
 Each group below is one falsification cycle: write → falsify with the named gate → revert.
 
