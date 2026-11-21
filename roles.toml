@@ -1,0 +1,18 @@
+# mcp-sexpr's roles.toml: one everyday developer for the mcp-grant workspace (mcp-grant specs/model/developer.md).
+# Party at the workspace carrier: mcp-sexpr-dev.
+
+[developer.dev]
+what         = "mcp-sexpr (crate mcp-tools): specifications, implementation, tests and documents"
+http-servers = { mcp-planner = 8214 }
+
+# dev's own planner: CLAUDE.md requires plan work to go through mcp-planner.
+[http-servers.mcp-planner]
+command = "~/.cargo/bin/mcp-planner"
+args    = ["server", "--port", "{port}", "--db", "{state}/planner.db", "--state-dir", "{state}", "--credentials", "{mapping}"]
+install = ["~/.cargo/bin/mcp-planner"]
+
+# Rust toolchain and cargo caches. ~/.cargo/git is written because spec-trace is a git dependency
+# (Cargo.toml, ssh://github.com/ywata/spec-trace); ~/.cargo/bin/spec-trace is read by bin/check_coverage.sh.
+[confinement]
+read  = ["~/.cargo", "~/.rustup"]
+write = ["~/.cargo/registry", "~/.cargo/git", "~/.cargo/.package-cache", "~/.cargo/.package-cache-mutate", "~/.cargo/.global-cache"]
